@@ -1,0 +1,8 @@
+pub mod change_password;
+pub mod email_verification;
+pub mod login;
+pub mod logout;
+pub mod me;
+pub mod refresh_token;
+pub mod registration;
+pub mod test_authorization;

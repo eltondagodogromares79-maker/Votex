@@ -1,0 +1,13 @@
+pub mod authentication_workflow;
+pub mod authorization_workflow;
+pub mod email_verification_workflow;
+pub mod logout_workflow;
+pub mod password_management_workflow;
+pub mod profile_workflow;
+pub mod refresh_token_workflow;
+pub mod registration_workflow;
+pub mod session_workflow;
+pub mod user_role_workflow;
+
+#[cfg(test)]
+mod tests;

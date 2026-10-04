@@ -1,0 +1,40 @@
+[package]
+name = "core_auth"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+core_infra = { path = "../portals/core_infra" }
+actix-web = "4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1"
+async-trait = "0.1"
+tracing = "0.1"
+validator = { version = "0.18", features = ["derive"] }
+regex = "1"
+once_cell = "1"
+sqlx = { version = "0.8", features = ["postgres", "uuid", "chrono", "runtime-tokio-rustls"] }
+argon2 = "0.5"
+tokio = { version = "1", features = ["full"] }
+rand = "0.10.3"
+hmac = "0.13.0"
+sha2 = "0.11.0"
+hex = "0.4.3"
+lettre = { version = "0.11", default-features = false, features = [
+    "builder",
+    "smtp-transport",
+    "tokio1",
+    "tokio1-native-tls",
+] }
+jsonwebtoken = "9"
+futures-util = "0.3.34"
+
+[dev-dependencies]
+actix-web = { version = "4", features = ["macros"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+serde_json = "1"
+dotenvy = "0.15"
+mockall = "0.13"

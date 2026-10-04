@@ -1,0 +1,26 @@
+[workspace]
+members = [
+    "api_server",
+    "core_auth",
+    "portals/core_infra",
+    "portals/admin",
+    "portals/org_owner",
+    "portals/coordinator",
+    "portals/judge",
+    "portals/tabulator",
+    "portals/audience"
+]
+resolver = "2"
+
+[package]
+name = "backend"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+api_server = { path = "api_server" }
+core_infra = { path = "portals/core_infra" }
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-rustls", "migrate"] }
+tokio = { version = "1", features = ["full"] }
+dotenvy = "0.15"
+

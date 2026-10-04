@@ -1,0 +1,20 @@
+[package]
+name = "admin"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+actix-web = "4"
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+core_auth = { path = "../../core_auth" }
+core_infra = { path = "../core_infra" }
+rust_decimal = { version = "1", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+sqlx = { version = "0.8", features = ["postgres", "uuid", "chrono", "json", "rust_decimal", "runtime-tokio-rustls"] }
+serde_json = "1"
+uuid = { version = "1", features = ["serde", "v4"] }
+validator = { version = "0.18", features = ["derive"] }
+
+[dev-dependencies]
+mockall = "0.13"

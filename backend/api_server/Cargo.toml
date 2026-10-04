@@ -1,0 +1,20 @@
+[package]
+name = "api_server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+core_infra = { path = "../portals/core_infra" }
+core_auth = { path = "../core_auth" }
+org_owner = { path = "../portals/org_owner" }
+admin = { path = "../portals/admin" }
+coordinator = { path = "../portals/coordinator" }
+judge = { path = "../portals/judge" }
+tabulator = { path = "../portals/tabulator" }
+audience = { path = "../portals/audience" }
+actix-web = "4"
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+dotenvy = "0.15"
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-rustls"] }
