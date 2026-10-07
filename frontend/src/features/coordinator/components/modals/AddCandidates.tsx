@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -76,6 +76,7 @@ export default function AddCandidateModal({
 }: AddCandidateModalProps) {
   const createContestant = useCreateContestant(pageantId);
   const { toast } = useToast();
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
   const {
     register,
@@ -95,7 +96,7 @@ export default function AddCandidateModal({
   }, [open, reset]);
 
   function handleClose() {
-    if (createContestant.isPending) return;
+    if (createContestant.isPending || isUploadingPhoto) return;
     onClose();
   }
 
@@ -126,9 +127,10 @@ export default function AddCandidateModal({
       onClose={handleClose}
       title="Add Candidate"
       description="Add a new contestant to this pageant."
+      size="lg"
       footer={
         <>
-          <Button variant="ghost" size="sm" onClick={handleClose} disabled={createContestant.isPending}>
+          <Button variant="ghost" size="sm" onClick={handleClose} disabled={createContestant.isPending || isUploadingPhoto}>
             Cancel
           </Button>
           <Button
@@ -157,7 +159,7 @@ export default function AddCandidateModal({
           />
         </Field>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           <Field label={<>First Name <span className="text-error">*</span></>} error={errors.firstName?.message}>
             <input type="text" placeholder="First name" disabled={createContestant.isPending}
               {...register("firstName")} className={fieldInput} />
@@ -172,7 +174,7 @@ export default function AddCandidateModal({
           </Field>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <Field
             label="Display Name"
             error={errors.displayName?.message}
@@ -208,6 +210,7 @@ export default function AddCandidateModal({
                 label="Upload photo"
                 dark
                 rounded
+                onUploadingChange={setIsUploadingPhoto}
               />
             )}
           />
