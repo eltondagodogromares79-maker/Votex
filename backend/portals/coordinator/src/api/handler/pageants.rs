@@ -6,7 +6,9 @@ use validator::Validate;
 
 use crate::{
     application::pageants::CoordinatorPageantApplication,
-    contracts::pageants::{AssignedPageantResponse, UpdateAssignedPageantRequest},
+    contracts::pageants::{
+        AssignedPageantResponse, PageantResourceLimitsResponse, UpdateAssignedPageantRequest,
+    },
 };
 
 fn authenticated_user_id(request: &HttpRequest) -> Result<Uuid, AppError> {
@@ -45,6 +47,17 @@ pub async fn get_assigned(
         .get_assigned(authenticated_user_id(&request)?, path.pageant_id)
         .await?;
     Ok(HttpResponse::Ok().json(AssignedPageantResponse::from(pageant)))
+}
+
+pub async fn get_resource_limits(
+    request: HttpRequest,
+    application: web::Data<CoordinatorPageantApplication>,
+    path: web::Path<PageantPath>,
+) -> Result<HttpResponse, AppError> {
+    let limits = application
+        .get_resource_limits(authenticated_user_id(&request)?, path.pageant_id)
+        .await?;
+    Ok(HttpResponse::Ok().json(PageantResourceLimitsResponse::from(limits)))
 }
 
 pub async fn update_assigned(

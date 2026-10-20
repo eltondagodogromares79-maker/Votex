@@ -6,12 +6,16 @@ import AddRoundModal from "../modals/AddRound";
 import EditRoundModal from "../modals/EditRound";
 import DeleteRoundModal from "../modals/DeleteRound";
 import type { RoundResponse, RoundStatus } from "@/src/types";
+import { usePageantResourceLimits } from "@/src/features/coordinator/hooks/usePageants";
 
 type RoundSectionProps = {
   pageantId: string;
+  onManageRound: (roundId: string) => void;
 };
 
-const ROUND_TYPE_LABELS: Record<string, string> = {
+const listActionClass = "inline-flex min-h-8 items-center justify-center rounded px-3 py-1.5 text-caption font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50";
+
+const LEGACY_ROUND_TYPE_LABELS: Record<string, string> = {
   PRELIMINARY: "Preliminary",
   SWIMWEAR: "Swimwear",
   FORMAL_WEAR: "Formal Wear",
@@ -21,16 +25,8 @@ const ROUND_TYPE_LABELS: Record<string, string> = {
   CUSTOM: "Custom",
 };
 
-const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
-
-function formatScheduled(value: string | null) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return dateTimeFormatter.format(date);
+function formatRoundType(value: string) {
+  return LEGACY_ROUND_TYPE_LABELS[value] ?? value;
 }
 
 function RoundsLoading() {
@@ -63,10 +59,12 @@ function RoundsLoading() {
 
 export default function RoundSection({
   pageantId,
+  onManageRound,
 }: RoundSectionProps) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<RoundResponse | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RoundResponse | null>(null);
+  const { data: limits } = usePageantResourceLimits(pageantId);
 
   const {
     data: rounds,
@@ -120,6 +118,10 @@ export default function RoundSection({
   }
 
   const roundList = rounds ?? [];
+  const canAddRound = !!limits?.hasActiveSubscription && (limits.maxRoundsPerPageant === null || limits.roundsUsed < limits.maxRoundsPerPageant);
+  const roundLimitLabel = !limits?.hasActiveSubscription
+    ? "An active subscription is required to add rounds."
+    : `${limits.roundsUsed} / ${limits.maxRoundsPerPageant ?? "∞"} round slots used.`;
 
   return (
     <>
@@ -139,11 +141,15 @@ export default function RoundSection({
           <button
             type="button"
             onClick={() => setIsAddModalOpen(true)}
+            disabled={!canAddRound}
+            title={!canAddRound ? roundLimitLabel : undefined}
             className="self-start bg-gold px-4 py-2.5 text-small font-semibold text-navy transition-colors hover:bg-gold/60 hover:text-navy focus:outline-none focus:ring-2 focus:ring-navy focus:ring-offset-2"
           >
             + Add Round
           </button>
         </div>
+
+        <p className={`mt-3 text-caption ${canAddRound ? "text-muted" : "text-amber-700"}`}>{roundLimitLabel}</p>
 
         {/* Round count */}
         <div className="mt-5 flex items-center gap-2">
@@ -174,6 +180,7 @@ export default function RoundSection({
             <button
               type="button"
               onClick={() => setIsAddModalOpen(true)}
+              disabled={!canAddRound}
               className="mt-4 text-small font-semibold text-navy hover:underline"
             >
               Add your first round
@@ -183,7 +190,7 @@ export default function RoundSection({
           /* Round table */
           <div className="mt-5 border border-border overflow-hidden">
             {/* Desktop header */}
-            <div className="hidden md:grid md:grid-cols-[80px_minmax(0,1fr)_140px_110px_1fr_110px] gap-4 px-5 py-3 bg-slate/30 border-b border-border">
+            <div className="hidden xl:grid xl:grid-cols-[70px_minmax(180px,1fr)_minmax(130px,.8fr)_100px_minmax(260px,1.2fr)] gap-3 px-4 py-3 bg-slate/30 border-b border-border">
               <p className="text-caption font-semibold text-muted uppercase tracking-wide">
                 No.
               </p>
@@ -200,10 +207,6 @@ export default function RoundSection({
                 Status
               </p>
 
-              <p className="text-caption font-semibold text-muted uppercase tracking-wide">
-                Starts / Ends
-              </p>
-
               <p className="text-caption font-semibold text-muted uppercase tracking-wide text-right">
                 Actions
               </p>
@@ -216,7 +219,7 @@ export default function RoundSection({
                   className="px-5 py-4 transition-colors hover:bg-slate/10"
                 >
                   {/* Desktop */}
-                  <div className="hidden md:grid md:grid-cols-[80px_minmax(0,1fr)_140px_110px_1fr_110px] gap-4 items-center">
+                  <div className="hidden xl:grid xl:grid-cols-[70px_minmax(180px,1fr)_minmax(130px,.8fr)_100px_minmax(260px,1.2fr)] gap-3 items-center">
                     {/* Round number */}
                     <div>
                       <span className="text-small font-semibold text-navy">
@@ -226,15 +229,15 @@ export default function RoundSection({
 
                     {/* Name */}
                     <div className="min-w-0">
-                      <p className="text-small font-semibold text-charcoal truncate">
+                      <p className="text-small font-semibold text-charcoal break-words [overflow-wrap:anywhere]">
                         {round.name}
                       </p>
                     </div>
 
                     {/* Type */}
                     <div>
-                      <p className="text-small text-charcoal">
-                        {ROUND_TYPE_LABELS[round.roundType] ?? round.roundType}
+                      <p className="text-small text-charcoal break-words [overflow-wrap:anywhere]">
+                        {formatRoundType(round.roundType)}
                       </p>
                     </div>
 
@@ -243,29 +246,20 @@ export default function RoundSection({
                       <RoundStatusBadge status={round.status} />
                     </div>
 
-                    {/* Starts / Ends */}
-                    <div>
-                      <p className="text-caption text-charcoal">
-                        {formatScheduled(round.startsAt)}
-                      </p>
-                      <p className="text-caption text-muted">
-                        {formatScheduled(round.endsAt)}
-                      </p>
-                    </div>
-
                     {/* Actions */}
-                    <div className="flex justify-end gap-3">
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <button type="button" onClick={() => onManageRound(round.id)} className={`${listActionClass} bg-gold text-navy hover:bg-gold/80 focus-visible:ring-gold`}>Manage Round</button>
                       <button
                         type="button"
                         onClick={() => setEditTarget(round)}
-                        className="text-caption font-semibold text-navy hover:underline"
+                        className={`${listActionClass} bg-navy text-white hover:bg-navy/90 focus-visible:ring-navy`}
                       >
                         Edit
                       </button>
                       <button
                         type="button"
                         onClick={() => setDeleteTarget(round)}
-                        className="text-caption font-semibold text-red-600 hover:underline"
+                        className={`${listActionClass} bg-error text-white hover:bg-error/90 focus-visible:ring-error`}
                       >
                         Delete
                       </button>
@@ -273,51 +267,37 @@ export default function RoundSection({
                   </div>
 
                   {/* Mobile */}
-                  <div className="md:hidden">
+                  <div className="xl:hidden">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-small font-semibold text-charcoal truncate">
+                        <p className="text-small font-semibold text-charcoal break-words [overflow-wrap:anywhere]">
                           {round.name}
                         </p>
 
-                        <p className="text-caption text-muted mt-0.5">
-                          Round #{round.roundNumber} · {ROUND_TYPE_LABELS[round.roundType] ?? round.roundType}
+                        <p className="text-caption text-muted mt-0.5 break-words [overflow-wrap:anywhere]">
+                          Round #{round.roundNumber} · {formatRoundType(round.roundType)}
                         </p>
                       </div>
 
                       <RoundStatusBadge status={round.status} />
                     </div>
 
-                    <div className="flex items-center gap-4 mt-3">
-                      <div>
-                        <p className="text-[11px] text-muted uppercase tracking-wide">
-                          Starts / Ends
-                        </p>
-
-                        <p className="text-caption text-charcoal mt-0.5">
-                          {formatScheduled(round.startsAt)}
-                        </p>
-                        <p className="text-caption text-muted">
-                          {formatScheduled(round.endsAt)}
-                        </p>
-                      </div>
-
-                      <div className="ml-auto flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setEditTarget(round)}
-                          className="text-caption font-semibold text-navy hover:underline"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(round)}
-                          className="text-caption font-semibold text-red-600 hover:underline"
-                        >
-                          Delete
-                        </button>
-                      </div>
+                    <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                      <button type="button" onClick={() => onManageRound(round.id)} className={`${listActionClass} bg-gold text-navy hover:bg-gold/80 focus-visible:ring-gold`}>Manage Round</button>
+                      <button
+                        type="button"
+                        onClick={() => setEditTarget(round)}
+                        className={`${listActionClass} bg-navy text-white hover:bg-navy/90 focus-visible:ring-navy`}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(round)}
+                        className={`${listActionClass} bg-error text-white hover:bg-error/90 focus-visible:ring-error`}
+                      >
+                        Delete
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -331,6 +311,8 @@ export default function RoundSection({
       <AddRoundModal
         pageantId={pageantId}
         open={isAddModalOpen}
+        canAdd={canAddRound}
+        limitMessage={roundLimitLabel}
         onClose={() => setIsAddModalOpen(false)}
       />
 
@@ -363,7 +345,7 @@ function RoundStatusBadge({ status }: { status: RoundStatus }) {
     DRAFT: "Draft",
     OPEN: "Open",
     CLOSED: "Closed",
-    FINALIZED: "Finalized",
+    FINALIZED: "Completed",
   };
 
   return (

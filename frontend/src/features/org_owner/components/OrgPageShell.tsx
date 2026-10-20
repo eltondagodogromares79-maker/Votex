@@ -1,3 +1,5 @@
+
+
 import Link from "next/link";
 import OrgHeader from "./OrgHeader";
 
@@ -22,10 +24,10 @@ export default function OrgPageShell({
   children,
 }: OrgPageShellProps) {
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex min-h-screen min-w-0 flex-col">
       <OrgHeader title={title} />
 
-      <div className="flex-1 px-4 sm:px-6 py-4 sm:py-6 w-full">
+      <div className="min-w-0 w-full flex-1 px-4 py-4 sm:px-6 sm:py-6">
 
         {/* ── Breadcrumb ─────────────────────────────────────────────────── */}
         {breadcrumbs && breadcrumbs.length > 0 && (

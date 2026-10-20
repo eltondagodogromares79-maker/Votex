@@ -15,9 +15,7 @@ pub async fn login(
 ) -> Result<HttpResponse, AppError> {
     request.validate()?;
 
-    let result = application
-        .login(request.into_inner(), None, None)
-        .await?;
+    let result = application.login(request.into_inner(), None, None).await?;
 
     // Refresh token goes into an HttpOnly cookie — never in the JSON body.
     let refresh_cookie = build_refresh_token_cookie(&result.refresh_token, &config);

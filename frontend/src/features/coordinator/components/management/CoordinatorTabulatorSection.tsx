@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { useTabulators } from "@/src/features/coordinator/hooks/useStaff";
 import AddTabulatorModal from "../modals/AddTabulator";
-import RemoveTabulatorModal from "../modals/RemoveTabulator";
-import type { PageantStaffResponse } from "@/src/types";
+import CoordinatorStaffActions from "./CoordinatorStaffActions";
+import { usePageantResourceLimits } from "@/src/features/coordinator/hooks/usePageants";
 
 type TabulatorSectionProps = {
   pageantId: string;
 };
+
 
 function TabulatorsLoading() {
   return (
@@ -42,7 +43,7 @@ export default function TabulatorSection({
   pageantId,
 }: TabulatorSectionProps) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [removeTarget, setRemoveTarget] = useState<PageantStaffResponse | null>(null);
+  const { data: limits } = usePageantResourceLimits(pageantId);
 
   const {
     data: tabulators,
@@ -96,6 +97,10 @@ export default function TabulatorSection({
   }
 
   const tabulatorList = tabulators ?? [];
+  const canAddTabulator = !!limits?.hasActiveSubscription && (limits.maxTabulatorUsers === null || limits.tabulatorsUsed < limits.maxTabulatorUsers);
+  const tabulatorLimitLabel = !limits?.hasActiveSubscription
+    ? "An active subscription is required to assign tabulators."
+    : `${limits.tabulatorsUsed} / ${limits.maxTabulatorUsers ?? "∞"} organization tabulator slots used.`;
 
   return (
     <>
@@ -107,15 +112,16 @@ export default function TabulatorSection({
               Tabulators
             </h4>
 
-            <p className="text-small text-muted mt-1">
-              Manage the tabulators for this pageant.
+          <p className="text-small text-muted mt-1">
+            Manage the tabulators for this pageant. {tabulatorLimitLabel}
             </p>
           </div>
 
           <button
             type="button"
             onClick={() => setIsAddModalOpen(true)}
-            className="self-start bg-gold px-4 py-2.5 text-small font-semibold text-navy transition-colors hover:bg-gold/60 hover:text-navy focus:outline-none focus:ring-2 focus:ring-navy focus:ring-offset-2"
+            disabled={!canAddTabulator}
+            className="self-start bg-gold px-4 py-2.5 text-small font-semibold text-navy transition-colors hover:bg-gold/60 hover:text-navy focus:outline-none focus:ring-2 focus:ring-navy focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             + Add Tabulator
           </button>
@@ -150,7 +156,8 @@ export default function TabulatorSection({
             <button
               type="button"
               onClick={() => setIsAddModalOpen(true)}
-              className="mt-4 text-small font-semibold text-navy hover:underline"
+              disabled={!canAddTabulator}
+              className="mt-4 text-small font-semibold text-navy hover:underline disabled:cursor-not-allowed disabled:opacity-50"
             >
               Add your first tabulator
             </button>
@@ -186,11 +193,11 @@ export default function TabulatorSection({
                       <TabulatorAvatar firstName={tabulator.firstName} />
 
                       <div className="min-w-0">
-                        <p className="text-small font-semibold text-charcoal truncate">
+                        <p className="text-small font-semibold text-charcoal break-words [overflow-wrap:anywhere]">
                           {tabulator.firstName} {tabulator.lastName}
                         </p>
 
-                        <p className="text-caption text-muted truncate">
+                        <p className="text-caption text-muted break-words [overflow-wrap:anywhere]">
                           {tabulator.email}
                         </p>
                       </div>
@@ -203,13 +210,7 @@ export default function TabulatorSection({
 
                     {/* Actions */}
                     <div className="flex justify-end gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setRemoveTarget(tabulator)}
-                        className="text-caption font-semibold text-red-600 hover:underline"
-                      >
-                        Remove
-                      </button>
+                      <CoordinatorStaffActions pageantId={pageantId} staff={tabulator} role="tabulator" />
                     </div>
                   </div>
 
@@ -221,11 +222,11 @@ export default function TabulatorSection({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-small font-semibold text-charcoal truncate">
+                            <p className="text-small font-semibold text-charcoal break-words [overflow-wrap:anywhere]">
                               {tabulator.firstName} {tabulator.lastName}
                             </p>
 
-                            <p className="text-caption text-muted mt-0.5 truncate">
+                            <p className="text-caption text-muted mt-0.5 break-words [overflow-wrap:anywhere]">
                               {tabulator.email}
                             </p>
                           </div>
@@ -235,13 +236,7 @@ export default function TabulatorSection({
 
                         <div className="flex items-center mt-3">
                           <div className="ml-auto flex items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setRemoveTarget(tabulator)}
-                              className="text-caption font-semibold text-red-600 hover:underline"
-                            >
-                              Remove
-                            </button>
+                            <CoordinatorStaffActions pageantId={pageantId} staff={tabulator} role="tabulator" />
                           </div>
                         </div>
                       </div>
@@ -258,15 +253,11 @@ export default function TabulatorSection({
       <AddTabulatorModal
         pageantId={pageantId}
         open={isAddModalOpen}
+        canAdd={canAddTabulator}
+        limitMessage={tabulatorLimitLabel}
         onClose={() => setIsAddModalOpen(false)}
       />
 
-      {/* Remove Tabulator Confirmation */}
-      <RemoveTabulatorModal
-        pageantId={pageantId}
-        tabulator={removeTarget}
-        onClose={() => setRemoveTarget(null)}
-      />
     </>
   );
 }
@@ -293,7 +284,7 @@ function TabulatorStatus({ isActive }: { isActive: boolean }) {
           : "bg-slate/50 text-muted border border-border"
       }`}
     >
-      {isActive ? "Active" : "Inactive"}
+      {isActive ? "Active" : "Deactivated"}
     </span>
   );
 }

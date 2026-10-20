@@ -16,9 +16,8 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-slate flex items-center justify-center px-4">
-        <div className="text-center max-w-md">
+    <div className="min-h-screen bg-slate flex items-center justify-center px-4">
+      <div className="text-center max-w-md">
           <h1 className="text-h1 font-serif text-charcoal mb-3">Something went wrong</h1>
           <p className="text-body text-muted mb-6">{COPY.errors.generic}</p>
           {error.digest && (
@@ -29,8 +28,7 @@ export default function GlobalError({
           <Button variant="primary" size="md" onClick={reset}>
             {COPY.actions.retry}
           </Button>
-        </div>
-      </body>
-    </html>
+      </div>
+    </div>
   );
 }

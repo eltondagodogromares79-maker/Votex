@@ -21,10 +21,7 @@ import {
 
 
 
-import {
-  AuthLogoBrandPanel,
-  AuthLogoMobile,
-} from "@/src/features/auth/components/AuthLogo";
+import { AuthLogoBrandPanel } from "@/src/features/auth/components/AuthLogo";
 
 
 
@@ -217,7 +214,7 @@ export default function RegisterPage() {
         "Account created! Please sign in to continue.",
       );
 
-      router.push("/login/org-owner");
+      router.push("/login");
     } catch (error) {
       if (error instanceof ApiError) {
         const code = error.code;
@@ -319,12 +316,6 @@ export default function RegisterPage() {
       ========================================================= */}
 
       <div className="flex-1 lg:w-7/12 xl:w-[55%] bg-navy flex flex-col">
-        {/* Mobile header */}
-
-        <div className="lg:hidden h-14 flex items-center px-6 border-b border-white/8">
-          <AuthLogoMobile />
-        </div>
-
         <div
           className="
             flex-1
@@ -483,7 +474,7 @@ export default function RegisterPage() {
                   {COPY.auth.hasAccount}{" "}
 
                   <Link
-                    href="/login/org-owner"
+                    href="/login"
                     className="
                       text-gold
                       font-semibold

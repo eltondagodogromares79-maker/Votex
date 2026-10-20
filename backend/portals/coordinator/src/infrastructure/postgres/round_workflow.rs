@@ -6,7 +6,8 @@ use uuid::Uuid;
 
 use crate::{
     application::ports::round_workflow::RoundWorkflow,
-    domain::round::{PageantRound, RoundStatus, RoundType},
+    domain::round::{PageantRound, RoundStatus},
+    infrastructure::postgres::entitlements::{ensure_below_limit, lock_org_and_get_limits},
 };
 
 pub struct PostgresRoundWorkflow {
@@ -38,16 +39,6 @@ impl TryFrom<RoundRow> for PageantRound {
     type Error = AppError;
 
     fn try_from(row: RoundRow) -> Result<Self, Self::Error> {
-        let round_type = match row.round_type.as_str() {
-            "PRELIMINARY" => RoundType::Preliminary,
-            "SWIMWEAR" => RoundType::Swimwear,
-            "FORMAL_WEAR" => RoundType::FormalWear,
-            "TALENT" => RoundType::Talent,
-            "QUESTION_AND_ANSWER" => RoundType::QuestionAndAnswer,
-            "FINAL" => RoundType::Final,
-            "CUSTOM" => RoundType::Custom,
-            _ => return Err(AppError::Configuration("unknown round type".to_owned())),
-        };
         let status = match row.status.as_str() {
             "DRAFT" => RoundStatus::Draft,
             "OPEN" => RoundStatus::Open,
@@ -60,7 +51,7 @@ impl TryFrom<RoundRow> for PageantRound {
             pageant_id: row.pageant_id,
             name: row.name,
             round_number: row.round_number,
-            round_type,
+            round_type: row.round_type,
             status,
             advancement_count: row.advancement_count,
             starts_at: row.starts_at,
@@ -136,13 +127,31 @@ impl RoundWorkflow for PostgresRoundWorkflow {
         round: PageantRound,
     ) -> Result<PageantRound, AppError> {
         ensure_coordinator(&self.pool, coordinator_id, round.pageant_id).await?;
+        if round.status == RoundStatus::Open {
+            ensure_round_ready(&self.pool, round.id).await?;
+        }
+        let mut transaction = self.pool.begin().await.map_err(database_error)?;
+        let limits =
+            lock_org_and_get_limits(&mut transaction, coordinator_id, round.pageant_id).await?;
+        let current_count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM pageant_rounds WHERE pageant_id = $1",
+        )
+        .bind(round.pageant_id)
+        .fetch_one(&mut *transaction)
+        .await
+        .map_err(database_error)?;
+        ensure_below_limit(
+            current_count,
+            limits.max_rounds_per_pageant,
+            "rounds per pageant",
+        )?;
         let query = format!(
             "INSERT INTO pageant_rounds AS round \
              (id, pageant_id, name, round_number, round_type, status, advancement_count, starts_at, ends_at) \
-             SELECT $1, $2, $3, $4, $5::round_type, 'DRAFT'::round_status, $6, $7, $8 \
+             SELECT $1, $2, $3, $4, $5, $6::round_status, $7, $8, $9 \
              WHERE EXISTS (SELECT 1 FROM pageant_member_roles assignment \
                  INNER JOIN roles assigned_role ON assigned_role.id = assignment.role_id \
-                 WHERE assignment.pageant_id = $2 AND assignment.user_id = $9 \
+                 WHERE assignment.pageant_id = $2 AND assignment.user_id = $10 \
                    AND assignment.is_active = TRUE AND assigned_role.code = 'PAGEANT_COORDINATOR' \
                    AND assigned_role.scope = 'PAGEANT'::role_scope AND assigned_role.is_active = TRUE) \
              RETURNING {ROUND_COLUMNS}"
@@ -152,16 +161,19 @@ impl RoundWorkflow for PostgresRoundWorkflow {
             .bind(round.pageant_id)
             .bind(&round.name)
             .bind(round.round_number)
-            .bind(round.round_type.as_db_str())
+            .bind(&round.round_type)
+            .bind(round.status.as_db_str())
             .bind(round.advancement_count)
             .bind(round.starts_at)
             .bind(round.ends_at)
             .bind(coordinator_id)
-            .fetch_optional(&self.pool)
+            .fetch_optional(&mut *transaction)
             .await
             .map_err(map_round_error)?
             .ok_or(AppError::Forbidden)?;
-        row.try_into()
+        let created = row.try_into()?;
+        transaction.commit().await.map_err(database_error)?;
+        Ok(created)
     }
 
     async fn update(
@@ -171,9 +183,12 @@ impl RoundWorkflow for PostgresRoundWorkflow {
         expected_status: RoundStatus,
     ) -> Result<PageantRound, AppError> {
         ensure_coordinator(&self.pool, coordinator_id, round.pageant_id).await?;
+        if round.status == RoundStatus::Open {
+            ensure_round_ready(&self.pool, round.id).await?;
+        }
         let query = format!(
             "UPDATE pageant_rounds round SET name = $3, round_number = $4, \
-             round_type = $5::round_type, status = $6::round_status, advancement_count = $7, \
+             round_type = $5, status = $6::round_status, advancement_count = $7, \
              starts_at = $8, ends_at = $9 \
              WHERE round.pageant_id = $1 AND round.id = $2 \
                AND round.status = $10::round_status \
@@ -189,7 +204,7 @@ impl RoundWorkflow for PostgresRoundWorkflow {
             .bind(round.id)
             .bind(&round.name)
             .bind(round.round_number)
-            .bind(round.round_type.as_db_str())
+            .bind(&round.round_type)
             .bind(round.status.as_db_str())
             .bind(round.advancement_count)
             .bind(round.starts_at)
@@ -259,6 +274,90 @@ impl RoundWorkflow for PostgresRoundWorkflow {
             )),
         }
     }
+}
+
+async fn ensure_round_ready(pool: &PgPool, round_id: Uuid) -> Result<(), AppError> {
+    let has_categories = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS (SELECT 1 FROM pageant_round_categories WHERE round_id = $1)",
+    )
+    .bind(round_id)
+    .fetch_one(pool)
+    .await
+    .map_err(database_error)?;
+    if !has_categories {
+        return Err(AppError::Conflict(
+            "Cannot open this round yet. Add at least one category first.".to_owned(),
+        ));
+    }
+
+    let incomplete_weights = sqlx::query_as::<_, (String, String)>(
+        "SELECT gender.label, SUM(rc.weight_percentage)::text \
+         FROM (VALUES ('Male', 'MEN'), ('Female', 'WOMEN')) AS gender(label, scope) \
+         JOIN pageant_round_categories rc ON rc.round_id = $1 \
+         JOIN pageant_categories c ON c.id = rc.category_id \
+         WHERE c.eligibility_scope::text = gender.scope \
+            OR c.eligibility_scope::text = 'OPEN' \
+            OR (gender.scope = 'WOMEN' AND c.eligibility_scope::text IN ('LGBTQ_PLUS', 'CUSTOM')) \
+         GROUP BY gender.label \
+         HAVING SUM(rc.weight_percentage) <> 100",
+    )
+    .bind(round_id)
+    .fetch_all(pool)
+    .await
+    .map_err(database_error)?;
+    if !incomplete_weights.is_empty() {
+        let details = incomplete_weights
+            .iter()
+            .map(|(group, total)| format!("{group} category weights currently total {total}%"))
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(AppError::Conflict(format!(
+            "Cannot open this round yet. Adjust the category weights so each eligibility group totals 100%. {details}."
+        )));
+    }
+
+    let incomplete_criteria = sqlx::query_as::<_, (String, i64, String)>(
+        "SELECT c.name, COUNT(criteria.id)::bigint, COALESCE(SUM(criteria.weight_percentage), 0)::text \
+         FROM pageant_round_categories rc \
+         JOIN pageant_categories c ON c.id = rc.category_id \
+         LEFT JOIN round_criteria criteria \
+           ON criteria.round_id = rc.round_id AND criteria.category_id = rc.category_id \
+         WHERE rc.round_id = $1 \
+         GROUP BY c.id, c.name \
+         HAVING COUNT(criteria.id) = 0 OR COALESCE(SUM(criteria.weight_percentage), 0) <> 100 \
+         ORDER BY c.name",
+    )
+    .bind(round_id)
+    .fetch_all(pool)
+    .await
+    .map_err(database_error)?;
+    if !incomplete_criteria.is_empty() {
+        let missing = incomplete_criteria
+            .iter()
+            .filter(|(_, count, _)| *count == 0)
+            .map(|(name, _, _)| name.as_str())
+            .collect::<Vec<_>>();
+        let incorrect_total = incomplete_criteria
+            .iter()
+            .filter(|(_, count, _)| *count > 0)
+            .map(|(name, _, total)| format!("{name} ({total}/100 points)"))
+            .collect::<Vec<_>>();
+        let mut details = Vec::new();
+        if !missing.is_empty() {
+            details.push(format!("Add criteria to: {}.", missing.join(", ")));
+        }
+        if !incorrect_total.is_empty() {
+            details.push(format!(
+                "Criteria points must total 100 for: {}.",
+                incorrect_total.join(", ")
+            ));
+        }
+        return Err(AppError::Conflict(format!(
+            "Cannot open this round yet. {}",
+            details.join(" ")
+        )));
+    }
+    Ok(())
 }
 
 async fn ensure_coordinator(

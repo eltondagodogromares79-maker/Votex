@@ -14,6 +14,8 @@ pub struct AssignPageantStaffRequest {
     #[serde(default)]
     #[validate(length(min = 1, max = 100))]
     pub last_name: Option<String>,
+    #[serde(default)]
+    pub confirm_cross_organization_reuse: bool,
 }
 
 #[derive(Debug, Serialize)]

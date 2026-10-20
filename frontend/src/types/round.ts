@@ -3,21 +3,14 @@
  *
  * Source of truth: backend/portals/coordinator/src/contracts/rounds.rs
  *
- * RoundType and RoundStatus use serde rename_all = "SCREAMING_SNAKE_CASE".
+ * RoundStatus uses serde rename_all = "SCREAMING_SNAKE_CASE". RoundType is
+ * organizer-entered text, so it stays open-ended.
  */
 
 /**
- * coordinator/contracts/rounds.rs RoundType.
- * serde: rename_all = "SCREAMING_SNAKE_CASE"
+ * User-defined round type label, such as Preliminary or Talent.
  */
-export type RoundType =
-  | "PRELIMINARY"
-  | "SWIMWEAR"
-  | "FORMAL_WEAR"
-  | "TALENT"
-  | "QUESTION_AND_ANSWER"
-  | "FINAL"
-  | "CUSTOM";
+export type RoundType = string;
 
 /**
  * coordinator/contracts/rounds.rs RoundStatus.
@@ -54,6 +47,7 @@ export interface CreateRoundRequest {
   name: string;
   roundNumber: number;
   roundType: RoundType;
+  status?: RoundStatus;
   advancementCount?: number | null;
   startsAt?: string | null;
   endsAt?: string | null;

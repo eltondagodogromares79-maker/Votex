@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useSession } from "@/src/features/auth/context/SessionContext";
+import { useNotifications } from "@/src/features/notifications/hooks/useNotifications";
 
 interface OrgHeaderProps {
   title?: string;
@@ -54,6 +55,7 @@ function Avatar({ firstName, lastName, profileImageUrl }: {
 
 export default function OrgHeader({ title }: OrgHeaderProps) {
   const { currentUser } = useSession();
+  const { data: notifications } = useNotifications(1, 0);
 
   const firstName      = currentUser?.firstName      ?? "";
   const lastName       = currentUser?.lastName       ?? "";
@@ -63,7 +65,7 @@ export default function OrgHeader({ title }: OrgHeaderProps) {
     : currentUser?.email ?? "Org Owner";
 
   return (
-    <header className="sticky top-0 z-[var(--z-header)] bg-surface border-b border-border h-16 flex items-center px-6 gap-4">
+    <header className="sticky top-0 z-[var(--z-header)] flex h-16 min-w-0 items-center gap-2 border-b border-border bg-surface px-3 sm:gap-4 sm:px-6">
 
       {/* Page title */}
       <div className="flex-1 min-w-0">
@@ -75,11 +77,11 @@ export default function OrgHeader({ title }: OrgHeaderProps) {
       </div>
 
       {/* Right side */}
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
 
         {/* Notification bell */}
-        <button
-          type="button"
+        <Link
+          href="/org_owner/notifications"
           aria-label="Notifications"
           className="relative w-9 h-9 flex items-center justify-center text-muted
                      hover:text-navy hover:bg-slate transition-colors"
@@ -88,8 +90,8 @@ export default function OrgHeader({ title }: OrgHeaderProps) {
             <path strokeLinecap="round" strokeLinejoin="round"
               d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
           </svg>
-          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-gold rounded-full" aria-hidden="true" />
-        </button>
+          {!!notifications?.unreadCount && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-error px-1 text-center text-[0.6rem] font-bold leading-4 text-white">{notifications.unreadCount > 99 ? "99+" : notifications.unreadCount}</span>}
+        </Link>
 
         {/* Help */}
         <Link
@@ -104,7 +106,7 @@ export default function OrgHeader({ title }: OrgHeaderProps) {
           </svg>
         </Link>
 
-        <div className="w-px h-6 bg-border" aria-hidden="true" />
+        <div className="hidden h-6 w-px bg-border sm:block" aria-hidden="true" />
 
         {/* User identity */}
         <div className="flex items-center gap-2.5">

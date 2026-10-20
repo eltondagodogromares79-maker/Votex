@@ -64,4 +64,10 @@ pub trait CoordinatorWorkflow: Send + Sync {
         organization_id: Uuid,
         user_id: Uuid,
     ) -> Result<(), AppError>;
+    async fn set_coordinator_active(
+        &self,
+        organization_id: Uuid,
+        user_id: Uuid,
+        is_active: bool,
+    ) -> Result<(), AppError>;
 }

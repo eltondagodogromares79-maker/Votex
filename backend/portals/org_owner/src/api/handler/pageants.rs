@@ -73,6 +73,17 @@ pub async fn update_pageant(
     Ok(HttpResponse::Ok().json(PageantResponse::from(pageant)))
 }
 
+pub async fn publish_pageant(
+    application: web::Data<PageantApplication>,
+    path: web::Path<PageantPath>,
+) -> Result<HttpResponse, AppError> {
+    let path = path.into_inner();
+    let pageant = application
+        .publish(path.organization_id, path.pageant_id)
+        .await?;
+    Ok(HttpResponse::Ok().json(PageantResponse::from(pageant)))
+}
+
 pub async fn archive_pageant(
     application: web::Data<PageantApplication>,
     path: web::Path<PageantPath>,
@@ -80,6 +91,17 @@ pub async fn archive_pageant(
     let path = path.into_inner();
     application
         .archive(path.organization_id, path.pageant_id)
+        .await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+pub async fn restore_pageant(
+    application: web::Data<PageantApplication>,
+    path: web::Path<PageantPath>,
+) -> Result<HttpResponse, AppError> {
+    let path = path.into_inner();
+    application
+        .restore(path.organization_id, path.pageant_id)
         .await?;
     Ok(HttpResponse::NoContent().finish())
 }

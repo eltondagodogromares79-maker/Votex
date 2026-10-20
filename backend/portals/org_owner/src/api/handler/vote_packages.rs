@@ -93,3 +93,14 @@ pub async fn deactivate(
         .await?;
     Ok(HttpResponse::NoContent().finish())
 }
+
+pub async fn activate(
+    application: web::Data<VotePackageApplication>,
+    path: web::Path<PackageItemPath>,
+) -> Result<HttpResponse, AppError> {
+    let path = path.into_inner();
+    application
+        .activate(path.organization_id, path.pageant_id, path.package_id)
+        .await?;
+    Ok(HttpResponse::NoContent().finish())
+}

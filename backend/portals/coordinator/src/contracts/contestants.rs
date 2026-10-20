@@ -24,6 +24,29 @@ pub struct ContestantRequest {
     pub user_id: Option<Uuid>,
 }
 
+#[derive(Debug, Deserialize, Validate)]
+pub struct ContestantPlacementsRequest {
+    #[serde(default)]
+    pub category_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub round_ids: Vec<Uuid>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ContestantPlacementsResponse {
+    pub category_ids: Vec<Uuid>,
+    pub round_ids: Vec<Uuid>,
+}
+
+impl From<crate::domain::contestant::ContestantPlacements> for ContestantPlacementsResponse {
+    fn from(value: crate::domain::contestant::ContestantPlacements) -> Self {
+        Self {
+            category_ids: value.category_ids,
+            round_ids: value.round_ids,
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct ContestantResponse {
     pub id: Uuid,
@@ -38,6 +61,8 @@ pub struct ContestantResponse {
     pub photo_url: Option<String>,
     pub biography: Option<String>,
     pub is_active: bool,
+    pub current_round_status: Option<String>,
+    pub current_round_name: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -57,6 +82,8 @@ impl From<Contestant> for ContestantResponse {
             photo_url: contestant.photo_url,
             biography: contestant.biography,
             is_active: contestant.is_active,
+            current_round_status: contestant.current_round_status,
+            current_round_name: contestant.current_round_name,
             created_at: contestant.created_at,
             updated_at: contestant.updated_at,
         }

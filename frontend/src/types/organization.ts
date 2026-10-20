@@ -71,6 +71,8 @@ export interface AdminOrganizationSubscriptionResponse {
   planName: string;
   planCode: string;
   status: string;
+  paymentStatus: string | null;
+  proofStatus: "PENDING" | "APPROVED" | "REJECTED" | "REVOKED" | null;
 }
 
 /**

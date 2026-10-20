@@ -192,8 +192,12 @@ api.interceptors.response.use(
     //   • The failing request was NOT itself the refresh call (prevents loops)
     //
     const isRefreshCall = originalRequest.url?.includes("/auth/refresh");
+    // Invalid login credentials also return 401. They must reach the sign-in
+    // form so it can show the error instead of triggering a refresh/logout
+    // redirect that immediately unmounts the toast.
+    const isLoginCall = originalRequest.url?.includes("/auth/login");
 
-    if (status === 401 && !originalRequest._retried && !isRefreshCall) {
+    if (status === 401 && !originalRequest._retried && !isRefreshCall && !isLoginCall) {
       originalRequest._retried = true;
 
       if (isRefreshing) {

@@ -25,7 +25,9 @@ export const audienceApi = {
 
   // POST /api/v1/audience/pageants/:pageantId/votes
   startVote: async (pageantId: string, data: StartVoteRequest): Promise<VoteCheckout> => {
-    const res = await api.post(`${base}/pageants/${pageantId}/votes`, data);
+    const res = await api.post(`${base}/pageants/${pageantId}/votes`, data, {
+      headers: { "Idempotency-Key": crypto.randomUUID() },
+    });
     return res.data;
   },
 

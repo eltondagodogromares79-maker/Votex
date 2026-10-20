@@ -7,7 +7,10 @@ use validator::Validate;
 
 use crate::{
     application::contestants::ContestantApplication,
-    contracts::contestants::{ContestantRequest, ContestantResponse},
+    contracts::contestants::{
+        ContestantPlacementsRequest, ContestantPlacementsResponse, ContestantRequest,
+        ContestantResponse,
+    },
 };
 
 #[derive(Deserialize)]
@@ -96,4 +99,33 @@ pub async fn deactivate(
         .deactivate(actor_id(&request)?, path.pageant_id, path.contestant_id)
         .await?;
     Ok(HttpResponse::NoContent().finish())
+}
+
+pub async fn get_placements(
+    request: HttpRequest,
+    application: web::Data<ContestantApplication>,
+    path: web::Path<ContestantPath>,
+) -> Result<HttpResponse, AppError> {
+    let value = application
+        .get_placements(actor_id(&request)?, path.pageant_id, path.contestant_id)
+        .await?;
+    Ok(HttpResponse::Ok().json(ContestantPlacementsResponse::from(value)))
+}
+
+pub async fn save_placements(
+    request: HttpRequest,
+    application: web::Data<ContestantApplication>,
+    path: web::Path<ContestantPath>,
+    body: web::Json<ContestantPlacementsRequest>,
+) -> Result<HttpResponse, AppError> {
+    body.validate()?;
+    let value = application
+        .save_placements(
+            actor_id(&request)?,
+            path.pageant_id,
+            path.contestant_id,
+            body.into_inner(),
+        )
+        .await?;
+    Ok(HttpResponse::Ok().json(ContestantPlacementsResponse::from(value)))
 }

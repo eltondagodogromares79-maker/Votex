@@ -1,156 +1,160 @@
 /**
- * Home / landing page content.
+ * Public home page copy. Keep claims tied to features that are available in the
+ * product; avoid customer names, metrics, and testimonials unless verified.
  */
 
 export const HOME_CONTENT = {
   hero: {
     heading: "Pageant Management,\nReimagined.",
     subheading:
-      "Votex gives coordinators, judges, and tabulators a single platform to run flawless pageants — from candidate setup to live results.",
-    cta: "Get Started Free",
+      "A shared workspace for pageant organizers, judges, tabulators, and audiences—from event setup and scoring to results and voting.",
+    cta: "Get Started",
     ctaSecondary: "See Pricing",
-    visual: "hero-illustration", // placeholder for next/image src
   },
 
   features: {
-    heading: "Everything a pageant needs",
+    heading: "Tools for every stage of a pageant",
     subheading:
-      "From the first candidate registration to the final crown moment — Votex handles it all.",
+      "Set up an event, organize its scoring, and give each participant a workspace for their role.",
     items: [
       {
         icon: "crown",
-        title: "For Coordinators",
+        title: "Organization owners",
         description:
-          "Build your entire pageant in minutes. Add candidates, define scoring categories, assign rounds, and invite judges with a single code.",
+          "Manage your organization, subscription, pageants, and the people assigned to each event.",
+      },
+      {
+        icon: "clipboard-document-list",
+        title: "Pageant setup",
+        description:
+          "Organize contestants, rounds, categories, criteria, and pageant staff in one workspace.",
       },
       {
         icon: "star",
-        title: "For Judges",
+        title: "Judge scoring",
         description:
-          "Score candidates on any device, in any round. No app download. Just a login code and a clean scoring interface built for focus.",
+          "Judges see their assigned pageants and enter scores for candidates by category and criterion.",
       },
       {
         icon: "table-cells",
-        title: "For Tabulators",
+        title: "Tabulation and standings",
         description:
-          "Watch scores flow in live. Verify completeness, advance candidates, and see weighted totals recalculate in real time.",
-      },
-      {
-        icon: "chart-bar",
-        title: "Live Leaderboard",
-        description:
-          "Weighted scores, per-round rankings, and instant recalculation as each judge submits. Results are always current.",
+          "Review submitted scores, contestant statuses, category results, and round leaderboards.",
       },
       {
         icon: "device-phone-mobile",
-        title: "Works on Any Device",
+        title: "Responsive workspaces",
         description:
-          "Fully responsive — phone, tablet, laptop. Judges scoring on tablets backstage? That's exactly what Votex was built for.",
+          "Use the owner, coordinator, judge, and tabulator workspaces on a phone, tablet, or computer.",
       },
       {
-        icon: "shield-check",
-        title: "Secure & Reliable",
+        icon: "ticket",
+        title: "Audience voting",
         description:
-          "Role-based access, encrypted credentials, and automatic reconnection ensure your event runs without a hitch.",
+          "Let audiences browse published pageants and purchase votes when voting is enabled for an event.",
       },
     ],
   },
 
   howItWorks: {
-    heading: "Up and running in minutes",
+    heading: "A clear workflow from setup to results",
     steps: [
       {
         number: "1",
-        title: "Create a pageant",
-        description: "Sign up, choose a plan, and create your event in under 5 minutes.",
+        title: "Set up your organization and event",
+        description:
+          "The organization owner chooses a plan and creates pageants. Coordinators prepare contestants, rounds, categories, and criteria.",
       },
       {
         number: "2",
-        title: "Add your team",
-        description: "Invite judges and tabulators — Votex generates their login codes automatically.",
+        title: "Bring in the pageant team",
+        description:
+          "Assign coordinators, judges, and tabulators to the pageant so each person can use their own workspace.",
       },
       {
         number: "3",
-        title: "Run the event",
-        description: "Scores come in live. The leaderboard updates instantly. You focus on the stage.",
+        title: "Score and review results",
+        description:
+          "Judges submit scores while categories are open. Tabulators can review submitted results and contestant standings.",
       },
     ],
   },
 
   roles: {
-    heading: "Built for every person on your team",
+    heading: "A workspace for each role",
     items: [
       {
-        role: "Coordinator",
-        tagline: "You're in control",
+        role: "Organization owners",
+        tagline: "Manage the organization",
         capabilities: [
-          "Create and manage multiple pageants",
-          "Add candidates with photos and details",
-          "Define scoring categories and weighted criteria",
-          "Assign rounds and track progress",
-          "Add judges and tabulators with instant login codes",
+          "Manage organization details and subscription",
+          "Create and manage pageants",
+          "Assign coordinators, judges, and tabulators",
         ],
       },
       {
-        role: "Judge",
-        tagline: "Score with confidence",
+        role: "Coordinators",
+        tagline: "Prepare the pageant",
         capabilities: [
-          "See assigned pageants and rounds",
-          "Score each candidate per criterion",
-          "Scores saved instantly as you submit",
-          "Works on phone, tablet, or laptop",
-          "No app install needed",
+          "Manage contestants and pageant details",
+          "Configure rounds, categories, and criteria",
+          "Manage judges and tabulators",
         ],
       },
       {
-        role: "Tabulator",
-        tagline: "Full visibility, zero chaos",
+        role: "Judges and tabulators",
+        tagline: "Score and review",
         capabilities: [
-          "Live grid view of all judges' scores",
-          "Per-criterion and total score averages",
-          "Advance candidates between rounds",
-          "Real-time connection with auto-reconnect",
-          "Immediate leaderboard view",
+          "Judges submit scores for assigned categories",
+          "Tabulators review scores and standings",
+          "Work from a dedicated pageant workspace",
+        ],
+      },
+      {
+        role: "Audience",
+        tagline: "Follow the event",
+        capabilities: [
+          "Browse published pageants and contestants",
+          "View candidate details",
+          "Purchase votes when the pageant enables voting",
         ],
       },
     ],
   },
 
-  testimonials: {
-    heading: "Trusted by pageant organizers",
+  workflow: {
+    heading: "One event, connected workflows",
     items: [
       {
-        quote:
-          "We used to spend an hour tallying scores on paper. With Votex, results were ready before the candidates walked off stage.",
-        name: "Maria Santos",
-        title: "Pageant Coordinator, Manila",
+        title: "Configure scoring",
+        description:
+          "Set category eligibility and criteria, then configure category weights for each round before opening it.",
       },
       {
-        quote:
-          "As a judge, I loved being able to score on my phone without any complicated setup. The interface is clean and fast.",
-        name: "Roberto Cruz",
-        title: "Judge, Regional Beauty Pageant",
+        title: "Collect judge scores",
+        description:
+          "Judges enter scores against the criteria configured for the categories they are assigned to score.",
       },
       {
-        quote:
-          "The live tabulation grid is exactly what we needed. I could verify every score in real time and catch discrepancies immediately.",
-        name: "Ana Reyes",
-        title: "Tabulator, National Youth Pageant",
+        title: "Review standings",
+        description:
+          "Tabulators can review submitted results and track contestant status and advancement across rounds.",
       },
     ],
   },
 
   pricing: {
-    heading: "Simple, transparent pricing",
+    heading: "Plans for different event needs",
     subheading:
-      "Pay per event or get a plan. No hidden fees, no lock-in.",
+      "Compare subscription plans and their pageant, judge, round, and category limits.",
     cta: "See All Plans",
   },
 
   cta: {
-    heading: "Ready to run a flawless pageant?",
-    subheading: "Set up your first event in minutes. No credit card required to start.",
-    button: "Get Started Free",
+    heading: "Plan your next pageant with VoteX",
+    subheading:
+      "Explore the available tools and plans, then create an organization to get started.",
+    button: "Get Started",
     secondary: "See pricing →",
   },
 } as const;

@@ -1,12 +1,12 @@
-import Sidebar from "@/src/features/org_owner/components/OrgSidebar";
 import { RouteGuard } from "@/src/features/auth/components/RouteGuard";
+import JudgeHeader from "@/src/features/judge/components/JudgeHeader";
 
 export default function JudgeLayout({ children }: { children: React.ReactNode }) {
   return (
-    <RouteGuard allowedRole="judge" loginPath="/login/judge">
-      <div className="flex min-h-screen bg-slate">
-        <Sidebar />
-        <main className="flex-1 min-h-screen overflow-auto">
+    <RouteGuard allowedRole="judge" loginPath="/login">
+      <div className="flex min-h-screen flex-col bg-slate">
+        <JudgeHeader />
+        <main className="min-h-[calc(100vh-76px)] min-w-0 flex-1 overflow-x-hidden">
           {children}
         </main>
       </div>

@@ -4,9 +4,8 @@ import { SITE_CONFIG } from "@/src/config/site";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  MdDashboard,
   MdEmojiEvents,
   MdChevronLeft,
   MdChevronRight,
@@ -14,27 +13,23 @@ import {
   MdExpandLess,
   MdPeople,
   MdGavel,
-  MdBusiness,
   MdPerson,
   MdSecurity,
-  MdLogout,
+  MdNotifications,
+  MdGroups,
+  MdCategory,
+  MdEventNote,
+  MdSettings,
+  MdSpaceDashboard,
+  MdLeaderboard,
 } from "react-icons/md";
+import { useAssignedPageant, usePageantResourceLimits } from "../hooks/usePageants";
 
 interface SidebarProps {
   className?: string;
 }
 
 const navSections = [
-  {
-    title: null as string | null,
-    items: [
-      {
-        name: "Dashboard",
-        href: "/coordinator/dashboard",
-        icon: MdDashboard,
-      },
-    ],
-  },
   {
     title: "Events",
     items: [
@@ -46,28 +41,13 @@ const navSections = [
     ],
   },
   {
-    title: "Teams",
-    items: [
-      {
-        name: "Tabulators",
-        href: "/coordinator/teams/tabulators",
-        icon: MdPeople,
-      },
-      {
-        name: "Judges",
-        href: "/coordinator/teams/judges",
-        icon: MdGavel,
-      },
-      {
-        name: "Org Owners",
-        href: "/coordinator/teams/org-owners",
-        icon: MdBusiness,
-      },
-    ],
-  },
-  {
     title: "Account",
     items: [
+      {
+        name: "Notifications",
+        href: "/coordinator/notifications",
+        icon: MdNotifications,
+      },
       {
         name: "Profile",
         href: "/coordinator/account/profile",
@@ -78,11 +58,6 @@ const navSections = [
         href: "/coordinator/account/security",
         icon: MdSecurity,
       },
-      {
-        name: "Logout",
-        href: "/logout",
-        icon: MdLogout,
-      },
     ],
   },
 ];
@@ -90,10 +65,10 @@ const navSections = [
 export default function Sidebar({ className = "" }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const pageantMatch = pathname.match(/^\/coordinator\/pageants\/([^/]+)$/);
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     Events: true,
-    Teams: true,
     Account: true,
   });
 
@@ -104,11 +79,15 @@ export default function Sidebar({ className = "" }: SidebarProps) {
     }));
   };
 
+  if (pageantMatch) {
+    return <PageantSidebar pageantId={pageantMatch[1]} />;
+  }
+
   return (
     <aside
       className={`
         sticky top-0 z-sidebar
-        flex h-screen flex-col
+        hidden h-screen shrink-0 flex-col lg:flex
         bg-navy text-white
         border-r border-white/10
         transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]
@@ -123,7 +102,7 @@ export default function Sidebar({ className = "" }: SidebarProps) {
           flex flex-col items-center justify-center
           border-b border-white/10
           transition-all duration-300
-          ${collapsed ? "h-[96px] gap-2 py-3" : "h-20"}
+          ${collapsed ? "gap-2 py-3" : "h-[112px]"}
         `}
       >
         <Link
@@ -139,13 +118,13 @@ export default function Sidebar({ className = "" }: SidebarProps) {
             priority
             className={`
               object-contain transition-all duration-300
-              ${collapsed ? "h-8 w-8" : "h-9 w-9"}
+              ${collapsed ? "max-w-14" : ""}
             `}
           />
 
           {!collapsed && (
             <span className="mt-1.5 font-serif font-bold tracking-[0.18em] text-gold text-[12.5px] leading-none">
-              {SITE_CONFIG.name.toUpperCase()}
+
             </span>
           )}
 
@@ -192,7 +171,7 @@ export default function Sidebar({ className = "" }: SidebarProps) {
       {/* Navigation */}
       <nav
         className={`
-          flex-1 px-2.5 py-5
+          flex-1 px-2.5 py-8
           ${collapsed ? "overflow-visible" : "overflow-y-auto"}
         `}
         aria-label="Main navigation"
@@ -329,6 +308,72 @@ export default function Sidebar({ className = "" }: SidebarProps) {
           </p>
         </div>
       )}
+    </aside>
+  );
+}
+
+function PageantSidebar({ pageantId }: { pageantId: string }) {
+  const pathname = usePathname();
+  const [activeSection, setActiveSection] = useState("overview");
+  const { data: limits } = usePageantResourceLimits(pageantId);
+  const { data: pageant } = useAssignedPageant(pageantId);
+  const pageantPath = `/coordinator/pageants/${pageantId}`;
+  const items = [
+    { label: "Overview", section: "overview", icon: MdSpaceDashboard },
+    { label: "Leaderboards", section: "leaderboards", icon: MdLeaderboard },
+    { label: "Candidates", section: "candidates", icon: MdGroups },
+    { label: "Rounds", section: "rounds", icon: MdEventNote, used: limits?.roundsUsed, max: limits?.maxRoundsPerPageant },
+    { label: "Categories", section: "categories", icon: MdCategory },
+    { label: "Judges", section: "judges", group: "Staff", icon: MdGavel, used: limits?.judgesUsed, max: limits?.maxJudgesPerPageant },
+    { label: "Tabulators", section: "tabulators", group: "Staff", icon: MdPeople, used: limits?.tabulatorsUsed, max: limits?.maxTabulatorUsers },
+    { label: "Settings", section: "settings", group: "Pageant", icon: MdSettings },
+  ];
+
+  useEffect(() => {
+    const fromUrl = () => setActiveSection(new URLSearchParams(window.location.search).get("section") ?? "overview");
+    const fromSectionEvent = (event: Event) => setActiveSection((event as CustomEvent<string>).detail);
+    fromUrl();
+    window.addEventListener("popstate", fromUrl);
+    window.addEventListener("coordinator:section", fromSectionEvent);
+    return () => {
+      window.removeEventListener("popstate", fromUrl);
+      window.removeEventListener("coordinator:section", fromSectionEvent);
+    };
+  }, [pathname]);
+
+  return (
+    <aside className="sticky top-0 z-sidebar hidden h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-navy text-white lg:flex">
+      <Link href="/coordinator/pageants" className="flex h-20 items-center gap-3 border-b border-white/10 px-5">
+        <Image src="/votex-logo.png" alt={`${SITE_CONFIG.name} logo`} width={100} height={100} priority className="h-auto w-auto" />
+        <div className="min-w-0"><p className="text-[10px] uppercase tracking-[0.18em] text-white/40">Coordinator</p><p className="truncate text-small font-semibold text-gold">{pageant?.name ?? "Pageant workspace"}</p></div>
+      </Link>
+      <nav aria-label="Pageant management" className="flex-1 overflow-y-auto px-3 py-4">
+        <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Management</p>
+        <ul className="space-y-1">
+          {items.map((item, index) => {
+            const Icon = item.icon;
+            const showGroup = item.group && (index === 4 || item.group !== items[index - 1]?.group);
+            const active = activeSection === item.section;
+            const limitText = item.used === undefined ? null : !limits?.hasActiveSubscription ? "—" : `${item.used}/${item.max ?? "∞"}`;
+            return <li key={item.section}>
+              {showGroup ? <p className="px-3 pb-2 pt-5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">{item.group}</p> : null}
+              <Link
+                href={`${pageantPath}?section=${item.section}`}
+                onClick={() => {
+                  setActiveSection(item.section);
+                  window.dispatchEvent(new CustomEvent("coordinator:section", { detail: item.section }));
+                }}
+                aria-current={active ? "page" : undefined}
+                className={`flex h-11 items-center gap-3 rounded-md px-3 text-[13px] font-medium transition-colors ${active ? "bg-white/10 text-gold" : "text-white/60 hover:bg-white/5 hover:text-white"}`}
+              >
+                <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? "text-gold" : "text-white/40"}`} />
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                {limitText ? <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] tabular-nums text-white/45">{limitText}</span> : null}
+              </Link>
+            </li>;
+          })}
+        </ul>
+      </nav>
     </aside>
   );
 }

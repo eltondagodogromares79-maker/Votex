@@ -24,6 +24,12 @@ export const authApi = {
     return response.data;
   },
 
+  // POST /api/v1/auth/send-verification-code (authenticated)
+  sendVerificationCode: async (): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>("/api/v1/auth/send-verification-code");
+    return response.data;
+  },
+
   // POST /api/v1/auth/login
   login: async (data: LoginRequest): Promise<LoginResponse> => {
     const response = await api.post<LoginResponse>("/api/v1/auth/login", data);
@@ -52,6 +58,16 @@ export const authApi = {
   updateMe: async (data: UpdateMeRequest): Promise<MeResponse> => {
     const response = await api.put<MeResponse>("/api/v1/auth/me", data);
     return response.data;
+  },
+
+  // PUT /api/v1/auth/me/email — request verification of a new address
+  requestEmailChange: async (email: string): Promise<MeResponse> => {
+    const response = await api.put<MeResponse>("/api/v1/auth/me/email", { email });
+    return response.data;
+  },
+
+  deleteMyAccount: async (data: DeleteMyAccountRequest): Promise<void> => {
+    await api.delete("/api/v1/auth/me", { data });
   },
 
   // POST /api/v1/auth/change-password  — requires Bearer token
@@ -157,11 +173,14 @@ export interface LogoutResponse {
 export interface MeResponse {
   userId: string;
   email: string;
+  pendingEmail: string | null;
+  emailVerifiedAt: string | null;
   firstName: string;
   middleName: string | null;
   lastName: string;
   phone: string | null;
   profileImageUrl: string | null;
+  mustChangePassword: boolean;
   role: string;
   organizationId?: string; // present for org_owner and coordinator roles
 }
@@ -178,6 +197,9 @@ export interface CurrentUser {
   role: import("@/src/lib/auth/roles").FrontendRole;
   organizationId?: string;
   profileImageUrl?: string | null;
+  emailVerifiedAt?: string | null;
+  pendingEmail?: string | null;
+  mustChangePassword?: boolean;
 }
 
 /** Matches backend UpdateProfileRequest */
@@ -187,6 +209,11 @@ export interface UpdateMeRequest {
   lastName: string;
   phone: string | null;
   profileImageUrl: string | null;
+}
+
+export interface DeleteMyAccountRequest {
+  currentPassword: string;
+  confirmation: string;
 }
 
 // ── Change password ───────────────────────────────────────────────────────────

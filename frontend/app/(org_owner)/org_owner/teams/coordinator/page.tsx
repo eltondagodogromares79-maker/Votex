@@ -17,6 +17,7 @@ import {
   useAddCoordinator,
   useUpdateCoordinator,
   useRemoveCoordinator,
+  useSetCoordinatorActive,
   useResendCoordinatorCredentials,
 } from "@/src/features/org_owner/hooks/useCoordinators";
 import { usePageantCoordinators } from "@/src/features/org_owner/hooks/usePageantStaff";
@@ -120,6 +121,8 @@ export default function CoordinatorsPage() {
   const { data: pageants = [] } = usePageants(orgId);
   const addMutation    = useAddCoordinator(orgId);
   const removeMutation = useRemoveCoordinator(orgId);
+  const activateMutation = useSetCoordinatorActive(orgId, true);
+  const deactivateMutation = useSetCoordinatorActive(orgId, false);
   const resendMutation = useResendCoordinatorCredentials(orgId);
 
   // ── Pageant assignment map: userId → pageant names ────────────────────────
@@ -201,6 +204,13 @@ export default function CoordinatorsPage() {
     } catch (err) {
       toast.error(err instanceof ApiError ? err.userMessage : "Failed to remove coordinator.");
     }
+  }
+
+  async function onSetActive(coordinator: CoordinatorResponse, active: boolean) {
+    try {
+      await (active ? activateMutation : deactivateMutation).mutateAsync(coordinator.userId);
+      toast.success(`${coordinator.firstName} ${coordinator.lastName} ${active ? "activated" : "deactivated"}.`);
+    } catch (err) { toast.error(err instanceof ApiError ? err.userMessage : "Failed to update coordinator status."); }
   }
 
   // ── Resend credentials ────────────────────────────────────────────────────
@@ -287,7 +297,7 @@ export default function CoordinatorsPage() {
       header: "Status",
       render: (row) => (
         <OrgBadge variant={row.isActive ? "success" : "muted"}>
-          {row.isActive ? "Active" : "Inactive"}
+          {row.isActive ? "Active" : "Deactivated"}
         </OrgBadge>
       ),
       cellClass: "w-28",
@@ -296,20 +306,22 @@ export default function CoordinatorsPage() {
       key: "actions",
       header: "",
       render: (row) => (
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button variant="primary" size="sm" onClick={() => openEdit(row)}>
             Edit
           </Button>
           <Button
-            variant="ghost"
+            variant="secondary"
             size="sm"
             onClick={() => onResend(row)}
             disabled={resendMutation.isPending}
           >
             Resend
           </Button>
+          {row.isActive ? <Button variant="danger" size="sm" onClick={() => onSetActive(row, false)} disabled={deactivateMutation.isPending}>Deactivate</Button>
+            : <Button variant="secondary" size="sm" onClick={() => onSetActive(row, true)} disabled={activateMutation.isPending}>Activate</Button>}
           <Button variant="danger" size="sm" onClick={() => setRemoveTarget(row)}>
-            Remove
+            Delete
           </Button>
         </div>
       ),
@@ -338,7 +350,7 @@ export default function CoordinatorsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <StatCard label="Total"    value={isLoading ? "—" : coordinators.length} sub="organization coordinators" />
         <StatCard label="Active"   value={isLoading ? "—" : activeCount}         sub={isLoading ? "" : `of ${coordinators.length} total`} />
-        <StatCard label="Inactive" value={isLoading ? "—" : inactiveCount}       sub="pending or removed" />
+        <StatCard label="Deactivated" value={isLoading ? "—" : inactiveCount}  sub="can be activated again" />
       </div>
 
       {/* ── Error ──────────────────────────────────────────────────────── */}
@@ -428,7 +440,7 @@ export default function CoordinatorsPage() {
         <form id="add-coordinator-form" onSubmit={addForm.handleSubmit(onAdd)} noValidate className="space-y-5">
 
           {/* Name row */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label={<>First Name <span className="text-error">*</span></>} error={addForm.formState.errors.firstName?.message}>
               <input id="add-first" type="text" placeholder="Juan" autoComplete="given-name"
                 className={fieldInput} {...addForm.register("firstName")} />
@@ -487,7 +499,7 @@ export default function CoordinatorsPage() {
       >
         <form id="edit-coordinator-form" onSubmit={editForm.handleSubmit(onEdit)} noValidate className="space-y-5">
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label={<>First Name <span className="text-error">*</span></>} error={editForm.formState.errors.firstName?.message}>
               <input type="text" placeholder="Juan" autoComplete="given-name"
                 className={fieldInput} {...editForm.register("firstName")} />

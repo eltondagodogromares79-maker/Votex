@@ -33,11 +33,7 @@ impl VotingApplication {
         package: Uuid,
         key: &str,
     ) -> Result<VoteCheckout, AppError> {
-        if key.trim().is_empty() || key.len() > 200 {
-            return Err(AppError::BadRequest(
-                "a valid Idempotency-Key header is required".into(),
-            ));
-        }
+        validate_idempotency_key(key)?;
         let (mut vote, amount_minor, item_name) = self
             .workflow
             .start_vote(user, pageant, candidate, package, key)
@@ -67,5 +63,31 @@ impl VotingApplication {
         payment_id: Option<&str>,
     ) -> Result<bool, AppError> {
         self.workflow.confirm_checkout(session, payment_id).await
+    }
+}
+
+fn validate_idempotency_key(key: &str) -> Result<(), AppError> {
+    if key.trim().is_empty() || key.len() > 200 {
+        return Err(AppError::BadRequest(
+            "a valid Idempotency-Key header is required".into(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_idempotency_key;
+
+    #[test]
+    fn accepts_non_blank_idempotency_key_up_to_limit() {
+        assert!(validate_idempotency_key("vote-request-1").is_ok());
+        assert!(validate_idempotency_key(&"k".repeat(200)).is_ok());
+    }
+
+    #[test]
+    fn rejects_blank_or_oversized_idempotency_key() {
+        assert!(validate_idempotency_key("  ").is_err());
+        assert!(validate_idempotency_key(&"k".repeat(201)).is_err());
     }
 }

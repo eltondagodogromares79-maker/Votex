@@ -2,7 +2,9 @@ use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::domain::directory::{AdminOrganization, AdminOrganizationSubscription, AdminPageant, AdminUser, OrganizationOwner};
+use crate::domain::directory::{
+    AdminOrganization, AdminOrganizationSubscription, AdminPageant, AdminUser, OrganizationOwner,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct DirectoryQuery {
@@ -87,6 +89,8 @@ pub struct AdminOrganizationSubscriptionResponse {
     pub plan_name: String,
     pub plan_code: String,
     pub status: String,
+    pub payment_status: Option<String>,
+    pub proof_status: Option<String>,
 }
 
 impl From<AdminOrganizationSubscription> for AdminOrganizationSubscriptionResponse {
@@ -95,6 +99,8 @@ impl From<AdminOrganizationSubscription> for AdminOrganizationSubscriptionRespon
             plan_name: s.plan_name,
             plan_code: s.plan_code,
             status: s.status,
+            payment_status: s.payment_status,
+            proof_status: s.proof_status,
         }
     }
 }
@@ -128,7 +134,9 @@ impl From<AdminOrganization> for AdminOrganizationResponse {
             phone: organization.phone,
             address: organization.address,
             is_active: organization.is_active,
-            subscription: organization.subscription.map(AdminOrganizationSubscriptionResponse::from),
+            subscription: organization
+                .subscription
+                .map(AdminOrganizationSubscriptionResponse::from),
             created_at: organization.created_at,
         }
     }

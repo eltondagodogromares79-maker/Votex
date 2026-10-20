@@ -1,4 +1,5 @@
 pub mod coordinator_workflow;
+pub mod organization_workflow;
 pub mod pageant_staff_workflow;
 pub mod pageant_workflow;
 pub mod subscription_workflow;

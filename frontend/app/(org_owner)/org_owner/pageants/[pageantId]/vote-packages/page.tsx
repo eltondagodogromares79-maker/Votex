@@ -5,12 +5,14 @@ import Link from "next/link";
 import OrgPageShell from "@/src/features/org_owner/components/OrgPageShell";
 import { Modal, ConfirmModal } from "@/src/components/ui/Modal";
 import { Button } from "@/src/components/ui/Button";
+import { useToast } from "@/src/components/ui/Toast";
 import { useSession } from "@/src/features/auth/context/SessionContext";
 import { usePageant } from "@/src/features/org_owner/hooks/usePageants";
 import {
   useVotePackages,
   useCreateVotePackage,
   useUpdateVotePackage,
+  useActivateVotePackage,
   useDeactivateVotePackage,
 } from "@/src/features/org_owner/hooks/useVotePackages";
 import type {
@@ -122,10 +124,12 @@ function PackageForm({
 function PackageRow({
   pkg,
   onEdit,
+  onActivate,
   onDeactivate,
 }: {
   pkg: VotePackageResponse;
   onEdit: (p: VotePackageResponse) => void;
+  onActivate: (p: VotePackageResponse) => void;
   onDeactivate: (p: VotePackageResponse) => void;
 }) {
   return (
@@ -171,25 +175,39 @@ function PackageRow({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center gap-1.5 shrink-0">
         <button
           onClick={() => onEdit(pkg)}
-          className="h-8 w-8 flex items-center justify-center text-muted hover:text-navy hover:bg-navy/8 transition-colors"
+          className="h-8 px-2 flex items-center justify-center gap-1.5 text-caption font-medium text-muted hover:text-navy hover:bg-navy/8 transition-colors"
           aria-label="Edit package"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
           </svg>
+          <span>Edit</span>
         </button>
         {pkg.isActive && (
           <button
             onClick={() => onDeactivate(pkg)}
-            className="h-8 w-8 flex items-center justify-center text-muted hover:text-error hover:bg-error/8 transition-colors"
+            className="h-8 px-2 flex items-center justify-center gap-1.5 text-caption font-medium text-muted hover:text-error hover:bg-error/8 transition-colors"
             aria-label="Deactivate package"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
             </svg>
+            <span>Deactivate</span>
+          </button>
+        )}
+        {!pkg.isActive && (
+          <button
+            onClick={() => onActivate(pkg)}
+            className="h-8 px-2 flex items-center justify-center gap-1.5 text-caption font-medium text-success hover:bg-success/8 transition-colors"
+            aria-label="Activate package"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 12.75l4.5 4.5L19 7.5" />
+            </svg>
+            <span>Activate</span>
           </button>
         )}
       </div>
@@ -206,6 +224,7 @@ export default function VotePackagesPage({
 }) {
   const { pageantId } = use(params);
   const { currentUser } = useSession();
+  const { toast } = useToast();
   const orgId = currentUser?.organizationId ?? "";
 
   const { data: pageant } = usePageant(orgId, pageantId);
@@ -213,6 +232,7 @@ export default function VotePackagesPage({
 
   const createMut    = useCreateVotePackage(orgId, pageantId);
   const deactivateMut = useDeactivateVotePackage(orgId, pageantId);
+  const activateMut = useActivateVotePackage(orgId, pageantId);
 
   // modal state
   const [addOpen,          setAddOpen]          = useState(false);
@@ -362,7 +382,7 @@ export default function VotePackagesPage({
             <p className="hidden sm:block w-28 text-right text-caption text-muted uppercase tracking-[0.08em]">Qty</p>
             <p className="w-24 text-right text-caption text-muted uppercase tracking-[0.08em]">Price</p>
             <p className="hidden md:block w-20 text-right text-caption text-muted uppercase tracking-[0.08em]">Status</p>
-            <div className="w-[4.5rem] shrink-0" />
+            <div className="w-[11rem] shrink-0" />
           </div>
 
           {packages.map(pkg => (
@@ -370,6 +390,13 @@ export default function VotePackagesPage({
               key={pkg.id}
               pkg={pkg}
               onEdit={openEdit}
+              onActivate={async (p) => {
+                try {
+                  await activateMut.mutateAsync(p.id);
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Could not activate package.");
+                }
+              }}
               onDeactivate={setDeactivateTarget}
             />
           ))}

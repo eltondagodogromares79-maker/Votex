@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import AdminPageShell from "@/src/features/admin/components/AdminPageShell";
 import { useOrganizations } from "@/src/features/admin/hooks/useOrganizations";
 import type { AdminOrganizationResponse } from "@/src/types";
@@ -12,16 +13,32 @@ const SUB_STATUS_STYLES: Record<string, string> = {
   TRIALING: "bg-gold/10 border-gold/30 text-gold",
   PAST_DUE: "bg-error/8 border-error/25 text-error",
   PAUSED:   "bg-border/30 border-border text-muted",
+  PENDING_PAYMENT: "bg-warning/10 border-warning/30 text-warning",
+  CANCELLED: "bg-error/8 border-error/25 text-error",
+  EXPIRED: "bg-border/30 border-border text-muted",
 };
 
-function SubBadge({ planName, status }: { planName: string; status: string }) {
+const PROOF_STATUS_STYLES: Record<string, string> = {
+  PENDING: "bg-warning/10 border-warning/30 text-warning",
+  APPROVED: "bg-success/8 border-success/25 text-success",
+  REJECTED: "bg-error/8 border-error/25 text-error",
+  REVOKED: "bg-error/8 border-error/25 text-error",
+};
+
+function StatusPill({ value, className }: { value: string; className: string }) {
+  const label = value === "PENDING_PAYMENT" ? "Pending Payment" : value.replaceAll("_", " ");
+  return <span className={`inline-flex items-center h-4 px-1.5 text-[9px] font-semibold uppercase tracking-wider border ${className}`}>{label}</span>;
+}
+
+function SubBadge({ planName, status, proofStatus }: { planName: string; status: string; proofStatus: string | null }) {
   const cls = SUB_STATUS_STYLES[status.toUpperCase()] ?? "bg-border/30 border-border text-muted";
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-small font-medium text-charcoal truncate leading-tight">{planName}</p>
-      <span className={`inline-flex items-center h-4 px-1.5 text-[9px] font-semibold uppercase tracking-wider border mt-0.5 ${cls}`}>
-        {status}
-      </span>
+      <div className="mt-1 flex flex-wrap gap-1">
+        <StatusPill value={status} className={cls} />
+        {proofStatus && <StatusPill value={proofStatus} className={PROOF_STATUS_STYLES[proofStatus] ?? "bg-border/30 border-border text-muted"} />}
+      </div>
     </div>
   );
 }
@@ -33,12 +50,12 @@ function Skeleton({ className = "" }: { className?: string }) {
 export default function AdminSubscriptionsPage() {
   const [offset,     setOffset]     = useState(0);
   const [search,     setSearch]     = useState("");
-  const [subFilter,  setSubFilter]  = useState<"all" | "subscribed" | "none">("subscribed");
+  const [subFilter,  setSubFilter]  = useState<"all" | "subscribed" | "none">("all");
 
   const { data: orgsData, isLoading } = useOrganizations({ limit: PAGE_SIZE, offset });
   const items: AdminOrganizationResponse[] = orgsData?.items ?? [];
 
-  // Filter: only show orgs that have an active subscription by default
+  // The default view includes active subscriptions and pending payment requests.
   const filtered = items.filter(o => {
     const q = search.toLowerCase();
     const matchSearch = !search || (
@@ -55,7 +72,12 @@ export default function AdminSubscriptionsPage() {
 
   const hasMore = orgsData ? orgsData.items.length === PAGE_SIZE : false;
 
-  const subscribedCount = items.filter(o => o.subscription !== null).length;
+  const activeStatuses = ["ACTIVE", "TRIALING", "PAST_DUE", "PAUSED"];
+  const activeCount = items.filter((o) => !!o.subscription && activeStatuses.includes(o.subscription.status.toUpperCase())).length;
+  const pendingPaymentCount = items.filter(o => o.subscription?.status.toUpperCase() === "PENDING_PAYMENT").length;
+  const approvedCount = items.filter(o => o.subscription?.proofStatus === "APPROVED").length;
+  const cancelledCount = items.filter(o => ["CANCELLED", "EXPIRED"].includes(o.subscription?.status.toUpperCase() ?? "")).length;
+  const noPlanCount = items.filter(o => o.subscription === null).length;
 
   return (
     <AdminPageShell
@@ -64,17 +86,31 @@ export default function AdminSubscriptionsPage() {
       breadcrumbs={[{ label: "Dashboard", href: "/admin/dashboard" }, { label: "Finance" }, { label: "Subscriptions" }]}
     >
       {/* Stats strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 2xl:grid-cols-6 gap-3 mb-6">
         <div className="bg-navy p-4">
-          <p className="text-caption text-white/50 uppercase tracking-wide mb-1">Subscribed</p>
+          <p className="text-caption text-white/50 uppercase tracking-wide mb-1">Active plans</p>
           <p className="font-serif font-bold text-2xl text-gold tabular-nums">
-            {isLoading ? "—" : subscribedCount}
+            {isLoading ? "—" : activeCount}
           </p>
+        </div>
+        <div className="bg-navy p-4">
+          <p className="text-caption text-white/50 uppercase tracking-wide mb-1">Pending payment</p>
+          <p className="font-serif font-bold text-2xl text-warning tabular-nums">
+            {isLoading ? "—" : pendingPaymentCount}
+          </p>
+        </div>
+        <div className="bg-navy p-4">
+          <p className="text-caption text-white/50 uppercase tracking-wide mb-1">Approved</p>
+          <p className="font-serif font-bold text-2xl text-success tabular-nums">{isLoading ? "—" : approvedCount}</p>
+        </div>
+        <div className="bg-navy p-4">
+          <p className="text-caption text-white/50 uppercase tracking-wide mb-1">Cancelled</p>
+          <p className="font-serif font-bold text-2xl text-white/80 tabular-nums">{isLoading ? "—" : cancelledCount}</p>
         </div>
         <div className="bg-navy p-4">
           <p className="text-caption text-white/50 uppercase tracking-wide mb-1">No Plan</p>
           <p className="font-serif font-bold text-2xl text-white tabular-nums">
-            {isLoading ? "—" : items.length - subscribedCount}
+            {isLoading ? "—" : noPlanCount}
           </p>
         </div>
         <div className="bg-navy p-4">
@@ -84,6 +120,12 @@ export default function AdminSubscriptionsPage() {
           </p>
         </div>
       </div>
+
+      {pendingPaymentCount > 0 && (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border border-warning/30 bg-warning/5 px-4 py-3">
+          <p className="text-small text-charcoal">{pendingPaymentCount} organization{pendingPaymentCount === 1 ? " has" : "s have"} a subscription awaiting payment review.</p>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
@@ -106,7 +148,7 @@ export default function AdminSubscriptionsPage() {
                   ? "bg-navy text-white border-navy"
                   : "bg-surface text-muted border-border hover:border-navy hover:text-navy"
               }`}>
-              {f === "subscribed" ? "Subscribed" : f === "none" ? "No Plan" : "All"}
+              {f === "subscribed" ? "Has Subscription" : f === "none" ? "No Plan" : "All"}
             </button>
           ))}
         </div>
@@ -128,13 +170,14 @@ export default function AdminSubscriptionsPage() {
               <p className="w-44 text-caption text-muted uppercase tracking-[0.08em]">Subscription</p>
               <p className="w-20 text-caption text-muted uppercase tracking-[0.08em]">Status</p>
               <p className="w-32 text-right text-caption text-muted uppercase tracking-[0.08em]">Joined</p>
+              <p className="w-28 text-right text-caption text-muted uppercase tracking-[0.08em]">Details</p>
             </div>
 
             {filtered.length === 0 && (
               <div className="px-5 py-10 text-center">
                 <p className="text-small text-muted">
                   {subFilter === "subscribed"
-                    ? "No organizations have an active subscription yet."
+                    ? "No organizations have a subscription request or active plan yet."
                     : search || subFilter !== "all"
                     ? "No organizations match your filters."
                     : "No organizations found."}
@@ -169,7 +212,7 @@ export default function AdminSubscriptionsPage() {
                 {/* Subscription */}
                 <div className="w-44 shrink-0">
                   {org.subscription
-                    ? <SubBadge planName={org.subscription.planName} status={org.subscription.status} />
+                    ? <SubBadge planName={org.subscription.planName} status={org.subscription.status} proofStatus={org.subscription.proofStatus} />
                     : <span className="text-caption text-muted italic">No plan</span>
                   }
                 </div>
@@ -190,6 +233,9 @@ export default function AdminSubscriptionsPage() {
                   <p className="text-caption text-muted">
                     {new Date(org.createdAt).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
                   </p>
+                </div>
+                <div className="w-28 text-right shrink-0">
+                  <Link href={`/admin/finance/subscriptions/${org.id}`} className="inline-flex h-9 items-center justify-center rounded bg-navy px-3 text-caption font-semibold text-white hover:bg-navy/90 transition-colors">View details</Link>
                 </div>
               </div>
             ))}

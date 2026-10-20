@@ -47,6 +47,8 @@ export default function EditCategoryModal({
         name: category.name,
         description: category.description ?? "",
         displayOrder: category.displayOrder,
+        eligibilityScope: category.eligibilityScope ?? "OPEN",
+        eligibilityNotes: category.eligibilityNotes ?? "",
       });
     }
   }, [category, reset]);
@@ -63,6 +65,8 @@ export default function EditCategoryModal({
         name: data.name.trim(),
         description: data.description?.trim() || null,
         displayOrder: data.displayOrder ?? 0,
+        eligibilityScope: data.eligibilityScope,
+        eligibilityNotes: data.eligibilityNotes?.trim() || null,
       });
 
       toast.success(`${data.name.trim()} updated.`);

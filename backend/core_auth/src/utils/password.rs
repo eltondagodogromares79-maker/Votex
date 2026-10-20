@@ -22,3 +22,21 @@ pub fn verify_password(password: &str, hash: &str) -> Result<bool, AppError> {
         .verify_password(password.as_bytes(), &parsed)
         .is_ok())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{hash_password, verify_password};
+
+    #[test]
+    fn password_hash_verifies_only_the_original_password() {
+        let hash = hash_password("SafePassword1!").unwrap();
+        assert_ne!(hash, "SafePassword1!");
+        assert!(verify_password("SafePassword1!", &hash).unwrap());
+        assert!(!verify_password("DifferentPassword1!", &hash).unwrap());
+    }
+
+    #[test]
+    fn malformed_password_hash_returns_an_error() {
+        assert!(verify_password("SafePassword1!", "not-an-argon2-hash").is_err());
+    }
+}

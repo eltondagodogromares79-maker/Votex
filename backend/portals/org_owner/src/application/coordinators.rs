@@ -20,7 +20,10 @@ pub struct CoordinatorApplication {
 
 impl CoordinatorApplication {
     pub fn new(workflow: Arc<dyn CoordinatorWorkflow>, email_sender: Arc<dyn EmailSender>) -> Self {
-        Self { workflow, email_sender }
+        Self {
+            workflow,
+            email_sender,
+        }
     }
 
     // ── Create ────────────────────────────────────────────────────────────────
@@ -71,7 +74,9 @@ impl CoordinatorApplication {
         organization_id: Uuid,
         user_id: Uuid,
     ) -> Result<OrganizationCoordinator, AppError> {
-        self.workflow.get_coordinator(organization_id, user_id).await
+        self.workflow
+            .get_coordinator(organization_id, user_id)
+            .await
     }
 
     // ── Update ────────────────────────────────────────────────────────────────
@@ -110,12 +115,21 @@ impl CoordinatorApplication {
 
     // ── Delete ────────────────────────────────────────────────────────────────
 
-    pub async fn remove(
+    pub async fn remove(&self, organization_id: Uuid, user_id: Uuid) -> Result<(), AppError> {
+        self.workflow
+            .remove_coordinator(organization_id, user_id)
+            .await
+    }
+
+    pub async fn set_active(
         &self,
         organization_id: Uuid,
         user_id: Uuid,
+        is_active: bool,
     ) -> Result<(), AppError> {
-        self.workflow.remove_coordinator(organization_id, user_id).await
+        self.workflow
+            .set_coordinator_active(organization_id, user_id, is_active)
+            .await
     }
 
     // ── Resend credentials ────────────────────────────────────────────────────
@@ -126,7 +140,10 @@ impl CoordinatorApplication {
         organization_id: Uuid,
         user_id: Uuid,
     ) -> Result<(), AppError> {
-        let coordinator = self.workflow.get_coordinator(organization_id, user_id).await?;
+        let coordinator = self
+            .workflow
+            .get_coordinator(organization_id, user_id)
+            .await?;
 
         let temporary_password = generate_temporary_password();
         let password_hash = hash_password(&temporary_password)?;

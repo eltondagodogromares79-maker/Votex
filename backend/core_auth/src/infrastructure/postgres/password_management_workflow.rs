@@ -30,7 +30,7 @@ impl PasswordManagementWorkflow for PostgresPasswordManagementWorkflow {
         if !verify_password(current_password, &current_hash)? {
             return Err(AppError::InvalidCredentials);
         }
-        sqlx::query("UPDATE users SET password_hash=$2, updated_at=now() WHERE id=$1")
+        sqlx::query("UPDATE users SET password_hash=$2, must_change_password=FALSE, updated_at=now() WHERE id=$1")
             .bind(user_id)
             .bind(new_password_hash)
             .execute(&mut *tx)

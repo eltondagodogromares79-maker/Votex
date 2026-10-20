@@ -3,6 +3,7 @@
 import OrgPageShell from "@/src/features/org_owner/components/OrgPageShell";
 import OrgBadge from "@/src/features/org_owner/components/OrgBadge";
 import { Button } from "@/src/components/ui/Button";
+import Link from "next/link";
 
 // ── Placeholder data ──────────────────────────────────────────────────────────
 const CURRENT_PLAN = {
@@ -225,9 +226,9 @@ export default function OrgOwnerBillingPage() {
                 Upgrade Plan
               </Button>
 
-              <Button variant="ghost" size="sm">
-                Cancel Subscription
-              </Button>
+              <Link href="/org_owner/billing/subscription" className="inline-flex h-9 items-center border border-border px-4 text-small font-medium text-charcoal hover:bg-slate">
+                Manage Subscription
+              </Link>
             </div>
           </div>
 
@@ -243,8 +244,8 @@ export default function OrgOwnerBillingPage() {
               </Button>
             </div>
 
-            <div className="border border-border bg-surface overflow-hidden">
-              <table className="w-full text-left border-collapse">
+            <div className="overflow-x-auto border border-border bg-surface">
+              <table className="w-full min-w-[640px] border-collapse text-left">
                 <thead>
                   <tr className="border-b border-border bg-navy/3">
                     <th className="px-4 py-3 text-caption font-semibold uppercase tracking-[0.1em] text-muted">

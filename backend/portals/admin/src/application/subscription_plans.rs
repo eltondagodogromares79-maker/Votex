@@ -111,3 +111,71 @@ fn to_plan(id: Uuid, request: SubscriptionPlanRequest) -> Result<SubscriptionPla
         is_active: request.is_active,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::to_plan;
+    use crate::{
+        contracts::subscription_plans::SubscriptionPlanRequest,
+        domain::subscription_plan::SubscriptionPlanKind,
+    };
+    use rust_decimal::Decimal;
+    use uuid::Uuid;
+
+    fn request() -> SubscriptionPlanRequest {
+        SubscriptionPlanRequest {
+            code: "  starter_1 ".into(),
+            name: "  Starter Plan ".into(),
+            kind: SubscriptionPlanKind::Premium,
+            price_amount: Decimal::new(1250, 2),
+            currency: " php ".into(),
+            billing_interval_months: Some(1),
+            max_pageants: Some(2),
+            max_tabulator_users: Some(1),
+            max_judges_per_pageant: Some(4),
+            max_rounds_per_pageant: Some(3),
+            max_categories_per_round: Some(5),
+            public_voting_enabled: true,
+            customization_enabled: false,
+            is_active: true,
+        }
+    }
+
+    #[test]
+    fn normalizes_plan_identifiers_and_currency() {
+        let plan = to_plan(Uuid::nil(), request()).unwrap();
+        assert_eq!(plan.code, "STARTER_1");
+        assert_eq!(plan.name, "Starter Plan");
+        assert_eq!(plan.currency, "PHP");
+        assert_eq!(plan.max_categories_per_round, Some(5));
+    }
+
+    #[test]
+    fn rejects_invalid_code_and_negative_price() {
+        let mut invalid_code = request();
+        invalid_code.code = "starter-plan".into();
+        assert!(matches!(
+            to_plan(Uuid::nil(), invalid_code),
+            Err(AppError::BadRequest(_))
+        ));
+
+        let mut negative_price = request();
+        negative_price.price_amount = Decimal::new(-1, 0);
+        assert!(matches!(
+            to_plan(Uuid::nil(), negative_price),
+            Err(AppError::BadRequest(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_non_positive_entitlement_limits() {
+        let mut invalid = request();
+        invalid.max_categories_per_round = Some(0);
+        assert!(matches!(
+            to_plan(Uuid::nil(), invalid),
+            Err(AppError::BadRequest(_))
+        ));
+    }
+
+    use core_infra::AppError;
+}

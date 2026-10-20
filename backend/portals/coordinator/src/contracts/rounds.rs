@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::domain::round::{PageantRound, RoundStatus, RoundType};
+use crate::domain::round::{PageantRound, RoundStatus};
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateRoundRequest {
@@ -11,7 +11,10 @@ pub struct CreateRoundRequest {
     pub name: String,
     #[validate(range(min = 1))]
     pub round_number: i32,
-    pub round_type: RoundType,
+    #[validate(length(min = 1, max = 100))]
+    pub round_type: String,
+    #[serde(default)]
+    pub status: RoundStatus,
     pub advancement_count: Option<i32>,
     pub starts_at: Option<DateTime<Utc>>,
     pub ends_at: Option<DateTime<Utc>>,
@@ -23,7 +26,8 @@ pub struct UpdateRoundRequest {
     pub name: String,
     #[validate(range(min = 1))]
     pub round_number: i32,
-    pub round_type: RoundType,
+    #[validate(length(min = 1, max = 100))]
+    pub round_type: String,
     pub status: RoundStatus,
     pub advancement_count: Option<i32>,
     pub starts_at: Option<DateTime<Utc>>,
@@ -36,7 +40,7 @@ pub struct RoundResponse {
     pub pageant_id: Uuid,
     pub name: String,
     pub round_number: i32,
-    pub round_type: RoundType,
+    pub round_type: String,
     pub status: RoundStatus,
     pub advancement_count: Option<i32>,
     pub starts_at: Option<DateTime<Utc>>,

@@ -7,8 +7,8 @@ use validator::Validate;
 use crate::{
     application::coordinators::CoordinatorApplication,
     contracts::coordinators::{
-        CoordinatorRequest, CoordinatorResponse, CreateCoordinatorRequest,
-        MessageResponse, UpdateCoordinatorRequest,
+        CoordinatorRequest, CoordinatorResponse, CreateCoordinatorRequest, MessageResponse,
+        UpdateCoordinatorRequest,
     },
 };
 
@@ -90,6 +90,28 @@ pub async fn remove_coordinator(
     let path = path.into_inner();
     application
         .remove(path.organization_id, path.user_id)
+        .await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+pub async fn deactivate_coordinator(
+    application: web::Data<CoordinatorApplication>,
+    path: web::Path<CoordinatorPath>,
+) -> Result<HttpResponse, AppError> {
+    let path = path.into_inner();
+    application
+        .set_active(path.organization_id, path.user_id, false)
+        .await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+pub async fn activate_coordinator(
+    application: web::Data<CoordinatorApplication>,
+    path: web::Path<CoordinatorPath>,
+) -> Result<HttpResponse, AppError> {
+    let path = path.into_inner();
+    application
+        .set_active(path.organization_id, path.user_id, true)
         .await?;
     Ok(HttpResponse::NoContent().finish())
 }

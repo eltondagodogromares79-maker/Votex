@@ -1,147 +1,177 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import CoordinatorPageShell from "@/src/features/coordinator/components/CoordinatorPageShell";
 import { Button } from "@/src/components/ui/Button";
+import { CloudinaryImageUpload } from "@/src/components/ui/CloudinaryImageUpload";
+import { useSession } from "@/src/features/auth/context/SessionContext";
+import { useMe } from "@/src/features/auth/hooks/useMe";
+import { useUpdateMe } from "@/src/features/auth/hooks/useUpdateMe";
+import type { MeResponse, UpdateMeRequest } from "@/src/features/auth/api/authentication";
+import DeleteAccountPanel from "@/src/features/auth/components/DeleteAccountPanel";
 
 const fieldLabel = "block text-small font-medium text-charcoal mb-1.5";
-const fieldInput  = "w-full h-10 px-3 bg-surface border border-border text-small text-charcoal placeholder:text-muted focus:outline-none focus:border-navy transition-colors";
-const fieldHint   = "text-caption text-muted mt-1";
+const fieldInput = "w-full h-10 px-3 bg-surface border border-border text-small text-charcoal placeholder:text-muted focus:outline-none focus:border-navy transition-colors disabled:opacity-60";
 
 function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   return (
-    <div className="bg-surface border border-border overflow-hidden">
-      <div className="px-6 py-4 border-b border-border">
-        <h3 className="font-serif font-semibold text-charcoal text-h3">{title}</h3>
-        {description && <p className="text-small text-muted mt-0.5 leading-relaxed">{description}</p>}
+    <section className="overflow-hidden border border-border bg-surface">
+      <div className="border-b border-border px-5 py-4 sm:px-6">
+        <h2 className="font-serif text-h3 font-semibold text-charcoal">{title}</h2>
+        {description ? <p className="mt-0.5 text-small leading-relaxed text-muted">{description}</p> : null}
       </div>
-      <div className="px-6 py-5">{children}</div>
-    </div>
+      <div className="space-y-5 px-5 py-5 sm:px-6">{children}</div>
+    </section>
   );
 }
 
+function toDraft(profile: MeResponse): UpdateMeRequest {
+  return {
+    firstName: profile.firstName,
+    middleName: profile.middleName,
+    lastName: profile.lastName,
+    phone: profile.phone,
+    profileImageUrl: profile.profileImageUrl,
+  };
+}
+
 export default function ProfilePage() {
-  const [avatar, setAvatar] = useState<string | null>(null);
+  const { currentUser, setCurrentUser } = useSession();
+  const profileQuery = useMe();
+  const updateProfile = useUpdateMe();
+  const [draft, setDraft] = useState<UpdateMeRequest | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  useEffect(() => {
+    if (profileQuery.data) setDraft(toDraft(profileQuery.data));
+  }, [profileQuery.data]);
+
+  function setField<K extends keyof UpdateMeRequest>(field: K, value: UpdateMeRequest[K]) {
+    setDraft((current) => current ? { ...current, [field]: value } : current);
+    setFeedback(null);
+  }
+
+  async function saveProfile() {
+    if (!draft) return;
+    if (!draft.firstName.trim() || !draft.lastName.trim()) {
+      setFeedback({ type: "error", message: "First name and last name are required." });
+      return;
+    }
+
+    try {
+      const updated = await updateProfile.mutateAsync({
+        ...draft,
+        firstName: draft.firstName.trim(),
+        middleName: draft.middleName?.trim() || null,
+        lastName: draft.lastName.trim(),
+        phone: draft.phone?.trim() || null,
+      });
+      setDraft(toDraft(updated));
+      if (currentUser) {
+        setCurrentUser({
+          ...currentUser,
+          firstName: updated.firstName,
+          lastName: updated.lastName,
+          profileImageUrl: updated.profileImageUrl,
+          emailVerifiedAt: updated.emailVerifiedAt,
+          pendingEmail: updated.pendingEmail,
+          mustChangePassword: updated.mustChangePassword,
+        });
+      }
+      setFeedback({ type: "success", message: "Your profile has been updated." });
+    } catch (error) {
+      setFeedback({ type: "error", message: error instanceof Error ? error.message : "Could not save your profile. Try again." });
+    }
+  }
+
+  const isSaving = updateProfile.isPending || uploadingPhoto;
+  const fullName = [draft?.firstName, draft?.middleName, draft?.lastName].filter(Boolean).join(" ");
+  const initials = `${draft?.firstName?.[0] ?? ""}${draft?.lastName?.[0] ?? ""}`.toUpperCase() || "C";
 
   return (
     <CoordinatorPageShell
+      hero
       title="Profile"
-      subtitle="Manage your coordinator profile and preferences."
-      breadcrumbs={[
-        { label: "Dashboard", href: "/coordinator/dashboard" },
-        { label: "Profile" },
-      ]}
+      subtitle="Manage the personal information used across your coordinator account."
+      breadcrumbs={[{ label: "Assigned pageants", href: "/coordinator/pageants" }, { label: "Profile" }]}
     >
-      <div className="max-w-3xl space-y-6">
-
-        {/* Profile photo */}
-        <Section title="Profile Photo" description="Your photo appears in pageant teams and activity feeds.">
-          <div className="flex items-center gap-6">
-            <div className="w-16 h-16 bg-navy flex items-center justify-center shrink-0">
-              {avatar ? (
-                <img src={avatar} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                <span className="font-serif font-bold text-gold text-[1.5rem]">C</span>
-              )}
-            </div>
-            <div className="flex gap-3">
-              <Button variant="ghost" size="sm">Upload Photo</Button>
-              {avatar && <Button variant="danger" size="sm" onClick={() => setAvatar(null)}>Remove</Button>}
-            </div>
+      <div className="w-full space-y-6">
+        {profileQuery.isLoading ? (
+          <div className="space-y-4" aria-label="Loading profile">
+            <div className="h-32 animate-pulse border border-border bg-slate" />
+            <div className="h-72 animate-pulse border border-border bg-slate" />
           </div>
-        </Section>
-
-        {/* Personal info */}
-        <Section title="Personal Information" description="Update your name and contact details.">
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className={fieldLabel}>First Name <span className="text-error">*</span></label>
-                <input type="text" defaultValue="Maria" className={fieldInput} />
-              </div>
-              <div>
-                <label className={fieldLabel}>Last Name <span className="text-error">*</span></label>
-                <input type="text" defaultValue="Santos" className={fieldInput} />
-              </div>
-            </div>
-            <div>
-              <label className={fieldLabel}>Display Name</label>
-              <input type="text" defaultValue="Maria Santos" className={fieldInput} />
-              <p className={fieldHint}>How your name appears to judges, tabulators, and org owners.</p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className={fieldLabel}>Email Address <span className="text-error">*</span></label>
-                <input type="email" defaultValue="maria@example.com" className={fieldInput} />
-              </div>
-              <div>
-                <label className={fieldLabel}>Phone Number</label>
-                <input type="tel" defaultValue="+63 917 234 5678" className={fieldInput} />
-              </div>
-            </div>
-            <div className="pt-1 flex gap-3">
-              <Button variant="secondary" size="sm">Save Changes</Button>
-              <Button variant="ghost" size="sm">Discard</Button>
-            </div>
+        ) : profileQuery.isError || !profileQuery.data || !draft ? (
+          <div role="alert" className="border border-error/30 bg-error/5 px-5 py-4">
+            <p className="text-small font-semibold text-error">Could not load your profile</p>
+            <p className="mt-1 text-caption text-muted">Refresh the page and try again.</p>
           </div>
-        </Section>
-
-        {/* Coordinator preferences */}
-        <Section title="Coordinator Preferences" description="Configure your pageant management settings.">
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className={fieldLabel}>Default Timezone</label>
-                <select className={fieldInput + " bg-surface"}>
-                  <option>Asia/Manila (GMT+8)</option>
-                  <option>Asia/Singapore (GMT+8)</option>
-                  <option>UTC</option>
-                </select>
+        ) : (
+          <>
+            {feedback ? (
+              <div role={feedback.type === "error" ? "alert" : "status"} className={`border px-4 py-3 text-small ${feedback.type === "error" ? "border-error/30 bg-error/5 text-error" : "border-success/30 bg-success/5 text-success"}`}>
+                {feedback.message}
               </div>
-              <div>
-                <label className={fieldLabel}>Date Format</label>
-                <select className={fieldInput + " bg-surface"}>
-                  <option>MM/DD/YYYY</option>
-                  <option>DD/MM/YYYY</option>
-                  <option>YYYY-MM-DD</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className={fieldLabel}>Bio</label>
-              <textarea rows={3} placeholder="Brief description about your pageant coordination experience…"
-                className="w-full px-3 py-2.5 bg-surface border border-border text-small text-charcoal placeholder:text-muted focus:outline-none focus:border-navy transition-colors resize-none" />
-              <p className={fieldHint}>Visible to org owners when they assign pageants to you.</p>
-            </div>
-            <Button variant="secondary" size="sm">Update Preferences</Button>
-          </div>
-        </Section>
+            ) : null}
 
-        {/* Notification preferences */}
-        <Section title="Notifications" description="Choose which events trigger email notifications.">
-          <div className="space-y-3">
-            {[
-              { label: "New pageant assigned",      desc: "When an org owner assigns a new pageant to you",       checked: true  },
-              { label: "Judge score submission",    desc: "When judges submit scores in your pageants",           checked: true  },
-              { label: "Round completion",          desc: "When a scoring round is completed",                     checked: true  },
-              { label: "Candidate status changes", desc: "When candidates are added, removed, or updated",        checked: false },
-              { label: "System announcements",     desc: "Platform updates and maintenance notifications",        checked: true  },
-            ].map((item) => (
-              <div key={item.label} className="flex items-start justify-between gap-4 py-3 border-b border-border/60 last:border-b-0">
-                <div>
-                  <p className="text-small font-medium text-charcoal">{item.label}</p>
-                  <p className="text-caption text-muted mt-0.5">{item.desc}</p>
+            <Section title="Profile photo" description="This image appears in your coordinator account menu and staff lists.">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gold/30 bg-navy font-serif text-2xl font-bold text-gold">
+                  {draft.profileImageUrl ? <img src={draft.profileImageUrl} alt={`${fullName || "Coordinator"} profile`} className="h-full w-full object-cover" /> : initials}
                 </div>
-                <input type="checkbox" defaultChecked={item.checked} 
-                  className="w-4 h-4 text-navy bg-surface border-border rounded focus:ring-navy focus:ring-2" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-small font-semibold text-charcoal">{fullName || "Coordinator"}</p>
+                  <p className="mt-0.5 text-caption text-muted">{profileQuery.data.email}</p>
+                  <div className="mt-3">
+                    <CloudinaryImageUpload
+                      folder="profile-images"
+                      value={draft.profileImageUrl}
+                      label="Upload photo"
+                      rounded
+                      onUploadingChange={setUploadingPhoto}
+                      onChange={(url) => setField("profileImageUrl", url || null)}
+                    />
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
-          <div className="pt-3">
-            <Button variant="secondary" size="sm">Save Notifications</Button>
-          </div>
-        </Section>
+            </Section>
 
+            <Section title="Personal information" description="These details are loaded from your account and saved to your profile.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className={fieldLabel} htmlFor="coordinator-first-name">First name <span className="text-error">*</span></label>
+                  <input id="coordinator-first-name" autoComplete="given-name" value={draft.firstName} onChange={(event) => setField("firstName", event.target.value)} className={fieldInput} />
+                </div>
+                <div>
+                  <label className={fieldLabel} htmlFor="coordinator-last-name">Last name <span className="text-error">*</span></label>
+                  <input id="coordinator-last-name" autoComplete="family-name" value={draft.lastName} onChange={(event) => setField("lastName", event.target.value)} className={fieldInput} />
+                </div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className={fieldLabel} htmlFor="coordinator-middle-name">Middle name</label>
+                  <input id="coordinator-middle-name" autoComplete="additional-name" value={draft.middleName ?? ""} onChange={(event) => setField("middleName", event.target.value || null)} className={fieldInput} />
+                </div>
+                <div>
+                  <label className={fieldLabel} htmlFor="coordinator-phone">Phone number</label>
+                  <input id="coordinator-phone" type="tel" autoComplete="tel" value={draft.phone ?? ""} onChange={(event) => setField("phone", event.target.value || null)} className={fieldInput} />
+                </div>
+              </div>
+              <div>
+                <label className={fieldLabel} htmlFor="coordinator-email">Email address</label>
+                <input id="coordinator-email" type="email" value={profileQuery.data.email} readOnly className={`${fieldInput} cursor-not-allowed bg-slate/50`} />
+                <p className="mt-1 text-caption text-muted">Email is used to sign in. Contact your organization owner if it needs to be changed.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
+                <Button variant="secondary" size="sm" loading={updateProfile.isPending} disabled={isSaving} onClick={() => void saveProfile()}>Save profile</Button>
+                <Button variant="ghost" size="sm" disabled={isSaving} onClick={() => { setDraft(toDraft(profileQuery.data!)); setFeedback(null); }}>Discard changes</Button>
+                {uploadingPhoto ? <span className="text-caption text-muted">Uploading photo…</span> : null}
+              </div>
+            </Section>
+            <DeleteAccountPanel />
+          </>
+        )}
       </div>
     </CoordinatorPageShell>
   );

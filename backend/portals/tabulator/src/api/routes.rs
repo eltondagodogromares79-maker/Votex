@@ -1,5 +1,5 @@
 use crate::api::handler::tabulation::{
-    advancements, categories, contestants, criteria, pageants, rounds,
+    advancements, categories, contestants, criteria, leaderboard, pageants, rounds,
 };
 use actix_web::web;
 use core_infra::{
@@ -42,6 +42,12 @@ pub fn configure(cfg: &mut web::ServiceConfig, token: Arc<dyn TokenAuthenticator
                 "/pageants/{pageant_id}/rounds/{round_id}/advancements",
                 web::get()
                     .to(advancements)
+                    .wrap(AuthorizationGuard::pageant("pageant.read", "pageant_id")),
+            )
+            .route(
+                "/pageants/{pageant_id}/rounds/{round_id}/leaderboard",
+                web::get()
+                    .to(leaderboard)
                     .wrap(AuthorizationGuard::pageant("pageant.read", "pageant_id")),
             ),
     );

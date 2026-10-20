@@ -4,37 +4,17 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum RoundType {
-    Preliminary,
-    Swimwear,
-    FormalWear,
-    Talent,
-    QuestionAndAnswer,
-    Final,
-    Custom,
-}
-
-impl RoundType {
-    pub fn as_db_str(self) -> &'static str {
-        match self {
-            Self::Preliminary => "PRELIMINARY",
-            Self::Swimwear => "SWIMWEAR",
-            Self::FormalWear => "FORMAL_WEAR",
-            Self::Talent => "TALENT",
-            Self::QuestionAndAnswer => "QUESTION_AND_ANSWER",
-            Self::Final => "FINAL",
-            Self::Custom => "CUSTOM",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum RoundStatus {
     Draft,
     Open,
     Closed,
     Finalized,
+}
+
+impl Default for RoundStatus {
+    fn default() -> Self {
+        Self::Draft
+    }
 }
 
 impl RoundStatus {
@@ -58,13 +38,37 @@ impl RoundStatus {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::RoundStatus;
+
+    #[test]
+    fn status_serialization_and_database_values_are_stable() {
+        assert_eq!(RoundStatus::Draft.as_db_str(), "DRAFT");
+        assert_eq!(RoundStatus::Open.as_db_str(), "OPEN");
+        assert_eq!(
+            serde_json::to_string(&RoundStatus::Finalized).unwrap(),
+            "\"FINALIZED\""
+        );
+    }
+
+    #[test]
+    fn only_forward_round_lifecycle_transitions_are_allowed() {
+        assert!(RoundStatus::Draft.can_transition_to(RoundStatus::Open));
+        assert!(RoundStatus::Open.can_transition_to(RoundStatus::Closed));
+        assert!(RoundStatus::Closed.can_transition_to(RoundStatus::Finalized));
+        assert!(!RoundStatus::Open.can_transition_to(RoundStatus::Draft));
+        assert!(!RoundStatus::Finalized.can_transition_to(RoundStatus::Open));
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PageantRound {
     pub id: Uuid,
     pub pageant_id: Uuid,
     pub name: String,
     pub round_number: i32,
-    pub round_type: RoundType,
+    pub round_type: String,
     pub status: RoundStatus,
     pub advancement_count: Option<i32>,
     pub starts_at: Option<DateTime<Utc>>,

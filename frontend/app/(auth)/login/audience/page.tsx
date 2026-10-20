@@ -1,9 +1,5 @@
-import { SignInForm } from "@/src/features/auth/components/login/SignInForm";
-
-export const metadata = {
-  title: "Audience Sign In | Votex",
-};
+import { redirect } from "next/navigation";
 
 export default function AudienceLoginPage() {
-  return <SignInForm role="audience" />;
+  redirect("/login");
 }

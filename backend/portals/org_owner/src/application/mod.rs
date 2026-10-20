@@ -1,4 +1,5 @@
 pub mod coordinators;
+pub mod organizations;
 pub mod pageant_staff;
 pub mod pageants;
 pub mod ports;

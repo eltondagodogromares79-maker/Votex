@@ -58,6 +58,9 @@ export function useLogin() {
         role: me.role,
         organizationId: me.organizationId,
         profileImageUrl: me.profileImageUrl,
+        emailVerifiedAt: me.emailVerifiedAt,
+        pendingEmail: me.pendingEmail,
+        mustChangePassword: me.mustChangePassword,
       };
 
       return currentUser;

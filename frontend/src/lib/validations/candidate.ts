@@ -7,7 +7,7 @@ export const createCandidateSchema = z.object({
   middleName: z.string().max(100).nullable().optional(),
   lastName: z.string().min(1).max(100),
   displayName: z.string().max(250).nullable().optional(),
-  gender: z.string().max(50).nullable().optional(),
+  gender: z.enum(["Male", "Female"], { error: "Choose Male or Female." }),
   photoUrl: z.string().nullable().optional(),
   biography: z.string().nullable().optional(),
   userId: z.string().uuid().nullable().optional(),

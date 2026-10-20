@@ -12,6 +12,8 @@ pub struct AssignJudgeRequest {
     pub first_name: String,
     #[validate(length(min = 1, max = 100))]
     pub last_name: String,
+    #[serde(default)]
+    pub confirm_cross_organization_reuse: bool,
 }
 
 #[derive(Debug, Serialize)]

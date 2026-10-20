@@ -16,11 +16,11 @@ export function useTabulatorContestants(pageantId: string) {
   });
 }
 
-export function useTabulatorCategories(pageantId: string) {
+export function useTabulatorCategories(pageantId: string, enabled = true) {
   return useQuery({
     queryKey: ["tabulator", "pageants", pageantId, "categories"],
     queryFn: () => tabulatorApi.listCategories(pageantId),
-    enabled: !!pageantId,
+    enabled: !!pageantId && enabled,
   });
 }
 
@@ -32,11 +32,11 @@ export function useTabulatorCriteria(pageantId: string) {
   });
 }
 
-export function useTabulatorRounds(pageantId: string) {
+export function useTabulatorRounds(pageantId: string, enabled = true) {
   return useQuery({
     queryKey: ["tabulator", "pageants", pageantId, "rounds"],
     queryFn: () => tabulatorApi.listRounds(pageantId),
-    enabled: !!pageantId,
+    enabled: !!pageantId && enabled,
   });
 }
 
@@ -45,5 +45,13 @@ export function useAdvancements(pageantId: string, roundId: string) {
     queryKey: ["tabulator", "pageants", pageantId, "rounds", roundId, "advancements"],
     queryFn: () => tabulatorApi.listAdvancements(pageantId, roundId),
     enabled: !!pageantId && !!roundId,
+  });
+}
+
+export function useTabulatorLeaderboard(pageantId: string, roundId: string, enabled = true) {
+  return useQuery({
+    queryKey: ["tabulator", "pageants", pageantId, "rounds", roundId, "leaderboard"],
+    queryFn: () => tabulatorApi.listLeaderboard(pageantId, roundId),
+    enabled: !!pageantId && !!roundId && enabled,
   });
 }

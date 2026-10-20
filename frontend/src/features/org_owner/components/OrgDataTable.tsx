@@ -9,6 +9,7 @@ export interface OrgTableColumn<T> {
   cellClass?: string;
   headerClass?: string;
   hideOnMobile?: boolean;
+  primary?: boolean;
 }
 
 interface OrgDataTableProps<T> {
@@ -27,10 +28,10 @@ export default function OrgDataTable<T>({
   className,
 }: OrgDataTableProps<T>) {
   return (
-    /* Horizontal scroll container — clips overflow on mobile, auto on larger screens */
+    /* Desktop table and labelled cards for narrow screens. */
     <div className={cn("border border-border bg-surface overflow-hidden", className)}>
-      <div className="overflow-x-auto w-full">
-        <table className="w-full text-left border-collapse" style={{ minWidth: "520px" }}>
+      <div className="hidden xl:block overflow-x-auto w-full">
+        <table className="w-full min-w-[520px] text-left border-collapse table-auto">
           <thead>
             <tr className="border-b border-border bg-navy/3">
               {columns.map((col) => (
@@ -61,7 +62,7 @@ export default function OrgDataTable<T>({
                   <td
                     key={col.key}
                     className={cn(
-                      "px-4 py-3 text-small text-charcoal",
+                      "px-4 py-3 text-small text-charcoal break-words [overflow-wrap:anywhere]",
                       col.hideOnMobile && "hidden sm:table-cell",
                       col.cellClass,
                     )}
@@ -75,6 +76,32 @@ export default function OrgDataTable<T>({
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="xl:hidden space-y-3 p-3">
+        {data.map((row) => (
+          <article
+            key={keyExtractor(row)}
+            onClick={onRowClick ? () => onRowClick(row) : undefined}
+            className={cn("min-w-0 border border-border bg-surface p-4 space-y-3", onRowClick && "cursor-pointer hover:bg-slate/30")}
+          >
+            {columns.map((column) => {
+              const value = column.render
+                ? column.render(row)
+                : String((row as Record<string, unknown>)[column.key] ?? "");
+
+              if (column.primary) {
+                return <div key={column.key} className={cn("min-w-0 text-body font-medium text-charcoal break-words [overflow-wrap:anywhere]", column.hideOnMobile && "hidden sm:block")}>{value}</div>;
+              }
+
+              return (
+                <div key={column.key} className={cn("grid min-w-0 grid-cols-[minmax(72px,auto)_minmax(0,1fr)] items-start gap-2", column.hideOnMobile && "hidden sm:grid")}>
+                  <span className="text-caption text-muted">{column.header}</span>
+                  <span className="min-w-0 text-right text-small text-charcoal break-words [overflow-wrap:anywhere]">{value}</span>
+                </div>
+              );
+            })}
+          </article>
+        ))}
       </div>
     </div>
   );

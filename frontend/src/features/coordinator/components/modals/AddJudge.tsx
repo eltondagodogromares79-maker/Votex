@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,6 +24,8 @@ export type AssignJudgeFormValues = z.infer<typeof assignJudgeSchema>;
 type AddJudgeModalProps = {
   pageantId: string;
   open: boolean;
+  canAdd?: boolean;
+  limitMessage?: string;
   onClose: () => void;
 };
 
@@ -53,14 +55,19 @@ export function Field({ label, error, children, hint }: { label: React.ReactNode
 export default function AddJudgeModal({
   pageantId,
   open,
+  canAdd = true,
+  limitMessage,
   onClose,
 }: AddJudgeModalProps) {
   const assignJudge = useAssignJudge(pageantId);
   const { toast } = useToast();
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [confirmReuse, setConfirmReuse] = useState(false);
 
   const {
     register,
     handleSubmit,
+    getValues,
     reset,
     formState: { errors },
   } = useForm<AssignJudgeFormValues>({
@@ -76,23 +83,42 @@ export default function AddJudgeModal({
 
   function handleClose() {
     if (assignJudge.isPending) return;
+    setSubmissionError(null);
+    setConfirmReuse(false);
     onClose();
   }
 
-  async function onSubmit(data: AssignJudgeFormValues) {
+  async function submitAssignment(data: AssignJudgeFormValues, confirmed = false) {
+    if (!canAdd) {
+      setSubmissionError(limitMessage ?? "The judge limit for this plan has been reached.");
+      return;
+    }
+    setSubmissionError(null);
     try {
       await assignJudge.mutateAsync({
         firstName: data.firstName.trim(),
         lastName: data.lastName.trim(),
         email: data.email.trim(),
+        confirmCrossOrganizationReuse: confirmed,
       });
 
       toast.success(`${data.firstName.trim()} ${data.lastName.trim()} assigned as judge.`);
       reset(DEFAULT_VALUES);
+      setConfirmReuse(false);
       onClose();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.userMessage : "Failed to assign judge.");
+      if (err instanceof ApiError && err.code === "STAFF_ACCOUNT_CROSS_ORGANIZATION") {
+        setConfirmReuse(true);
+        setSubmissionError(err.userMessage);
+        return;
+      }
+      setSubmissionError(err instanceof ApiError ? err.userMessage : "Failed to assign judge. Please try again.");
     }
+  }
+
+  async function onSubmit(data: AssignJudgeFormValues) {
+    setConfirmReuse(false);
+    await submitAssignment(data);
   }
 
   return (
@@ -113,6 +139,7 @@ export default function AddJudgeModal({
             form="add-judge-form"
             type="submit"
             loading={assignJudge.isPending}
+            disabled={!canAdd}
           >
             Add Judge
           </Button>
@@ -120,6 +147,9 @@ export default function AddJudgeModal({
       }
     >
       <form id="add-judge-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
+        {!canAdd && limitMessage ? <p role="alert" className="border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-caption text-amber-100">{limitMessage}</p> : null}
+        {submissionError ? <div role="alert" aria-live="polite" className={`flex gap-3 border px-4 py-3 text-small leading-relaxed ${confirmReuse ? "border-amber-300/50 bg-amber-300/10 text-amber-50" : "border-error/40 bg-error/10 text-red-100"}`}><span aria-hidden="true" className="font-bold">!</span><p>{submissionError}</p></div> : null}
+        {confirmReuse ? <div className="space-y-3 rounded border border-amber-300/30 bg-amber-300/5 p-4"><p className="text-caption leading-relaxed text-white/75">Continuing links the existing account and password to this organization’s pageant. No new account or password email will be created.</p><div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" onClick={() => void submitAssignment(getValues(), true)} loading={assignJudge.isPending}>Use existing account</Button><Button variant="ghost" size="sm" onClick={() => { setConfirmReuse(false); setSubmissionError(null); }} disabled={assignJudge.isPending}>Cancel</Button></div></div> : null}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <Field label={<>First Name <span className="text-error">*</span></>} error={errors.firstName?.message}>
@@ -136,7 +166,7 @@ export default function AddJudgeModal({
         <Field
           label={<>Email Address <span className="text-error">*</span></>}
           error={errors.email?.message}
-          hint="An existing account will be linked, or a new account created with credentials emailed automatically."
+          hint="Each email can have one staff role: judge or tabulator. Existing accounts are linked; new accounts receive credentials by email."
         >
           <input type="email" placeholder="judge@example.com" autoComplete="email" disabled={assignJudge.isPending}
             {...register("email")} className={fieldInput} />

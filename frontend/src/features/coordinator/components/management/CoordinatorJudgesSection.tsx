@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { useJudges } from "@/src/features/coordinator/hooks/useStaff";
 import AddJudgeModal from "../modals/AddJudge";
-import RemoveJudgeModal from "../modals/RemoveJudge";
-import type { PageantStaffResponse } from "@/src/types";
+import CoordinatorStaffActions from "./CoordinatorStaffActions";
+import { usePageantResourceLimits } from "@/src/features/coordinator/hooks/usePageants";
 
 type JudgeSectionProps = {
   pageantId: string;
 };
+
 
 function JudgesLoading() {
   return (
@@ -42,7 +43,7 @@ export default function JudgeSection({
   pageantId,
 }: JudgeSectionProps) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [removeTarget, setRemoveTarget] = useState<PageantStaffResponse | null>(null);
+  const { data: limits } = usePageantResourceLimits(pageantId);
 
   const {
     data: judges,
@@ -96,6 +97,10 @@ export default function JudgeSection({
   }
 
   const judgeList = judges ?? [];
+  const canAddJudge = !!limits?.hasActiveSubscription && (limits.maxJudgesPerPageant === null || limits.judgesUsed < limits.maxJudgesPerPageant);
+  const judgeLimitLabel = !limits?.hasActiveSubscription
+    ? "An active subscription is required to assign judges."
+    : `${limits.judgesUsed} / ${limits.maxJudgesPerPageant ?? "∞"} judge slots used.`;
 
   return (
     <>
@@ -107,15 +112,16 @@ export default function JudgeSection({
               Judges
             </h4>
 
-            <p className="text-small text-muted mt-1">
-              Manage the judges for this pageant.
+          <p className="text-small text-muted mt-1">
+            Manage the judges for this pageant. {judgeLimitLabel}
             </p>
           </div>
 
           <button
             type="button"
             onClick={() => setIsAddModalOpen(true)}
-            className="self-start bg-gold px-4 py-2.5 text-small font-semibold text-navy transition-colors hover:bg-gold/60 hover:text-navy focus:outline-none focus:ring-2 focus:ring-navy focus:ring-offset-2"
+            disabled={!canAddJudge}
+            className="self-start bg-gold px-4 py-2.5 text-small font-semibold text-navy transition-colors hover:bg-gold/60 hover:text-navy focus:outline-none focus:ring-2 focus:ring-navy focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             + Add Judge
           </button>
@@ -150,7 +156,8 @@ export default function JudgeSection({
             <button
               type="button"
               onClick={() => setIsAddModalOpen(true)}
-              className="mt-4 text-small font-semibold text-navy hover:underline"
+              disabled={!canAddJudge}
+              className="mt-4 text-small font-semibold text-navy hover:underline disabled:cursor-not-allowed disabled:opacity-50"
             >
               Add your first judge
             </button>
@@ -186,11 +193,11 @@ export default function JudgeSection({
                       <JudgeAvatar firstName={judge.firstName} />
 
                       <div className="min-w-0">
-                        <p className="text-small font-semibold text-charcoal truncate">
+                        <p className="text-small font-semibold text-charcoal break-words [overflow-wrap:anywhere]">
                           {judge.firstName} {judge.lastName}
                         </p>
 
-                        <p className="text-caption text-muted truncate">
+                        <p className="text-caption text-muted break-words [overflow-wrap:anywhere]">
                           {judge.email}
                         </p>
                       </div>
@@ -203,13 +210,7 @@ export default function JudgeSection({
 
                     {/* Actions */}
                     <div className="flex justify-end gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setRemoveTarget(judge)}
-                        className="text-caption font-semibold text-red-600 hover:underline"
-                      >
-                        Remove
-                      </button>
+                      <CoordinatorStaffActions pageantId={pageantId} staff={judge} role="judge" />
                     </div>
                   </div>
 
@@ -221,11 +222,11 @@ export default function JudgeSection({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-small font-semibold text-charcoal truncate">
+                            <p className="text-small font-semibold text-charcoal break-words [overflow-wrap:anywhere]">
                               {judge.firstName} {judge.lastName}
                             </p>
 
-                            <p className="text-caption text-muted mt-0.5 truncate">
+                            <p className="text-caption text-muted mt-0.5 break-words [overflow-wrap:anywhere]">
                               {judge.email}
                             </p>
                           </div>
@@ -235,13 +236,7 @@ export default function JudgeSection({
 
                         <div className="flex items-center mt-3">
                           <div className="ml-auto flex items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setRemoveTarget(judge)}
-                              className="text-caption font-semibold text-red-600 hover:underline"
-                            >
-                              Remove
-                            </button>
+                            <CoordinatorStaffActions pageantId={pageantId} staff={judge} role="judge" />
                           </div>
                         </div>
                       </div>
@@ -258,15 +253,11 @@ export default function JudgeSection({
       <AddJudgeModal
         pageantId={pageantId}
         open={isAddModalOpen}
+        canAdd={canAddJudge}
+        limitMessage={judgeLimitLabel}
         onClose={() => setIsAddModalOpen(false)}
       />
 
-      {/* Remove Judge Confirmation */}
-      <RemoveJudgeModal
-        pageantId={pageantId}
-        judge={removeTarget}
-        onClose={() => setRemoveTarget(null)}
-      />
     </>
   );
 }
@@ -293,7 +284,7 @@ function JudgeStatus({ isActive }: { isActive: boolean }) {
           : "bg-slate/50 text-muted border border-border"
       }`}
     >
-      {isActive ? "Active" : "Inactive"}
+      {isActive ? "Active" : "Deactivated"}
     </span>
   );
 }

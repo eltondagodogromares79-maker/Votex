@@ -1,9 +1,5 @@
-import { SignInForm } from "@/src/features/auth/components/login/SignInForm";
-
-export const metadata = {
-  title: "Tabulator Sign In | Votex",
-};
+import { redirect } from "next/navigation";
 
 export default function TabulatorLoginPage() {
-  return <SignInForm role="tabulator" />;
+  redirect("/login");
 }

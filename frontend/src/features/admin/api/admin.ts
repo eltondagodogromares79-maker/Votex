@@ -10,6 +10,10 @@ import type {
   AuditLogResponse,
   TransactionLogResponse,
   LogPage,
+  SubscriptionPaymentProof,
+  ReviewPaymentProofRequest,
+  RevokePaymentApprovalRequest,
+  AdminSubscriptionDetails,
 } from "@/src/types";
 
 // ─── Directory ────────────────────────────────────────────────────────────────
@@ -19,7 +23,58 @@ export interface DirectoryQuery {
   offset?: number;
 }
 
+export interface AdminLegalPolicy {
+  id: string;
+  slug: "terms" | "privacy" | "refund-policy" | "cookie-policy";
+  title: string;
+  intro: string;
+  body: string;
+  version: number;
+  updatedAt: string;
+}
+
 export const adminApi = {
+
+  listLegalPolicies: async (): Promise<AdminLegalPolicy[]> => {
+    const response = await api.get<AdminLegalPolicy[]>("/api/v1/admin/legal-policies");
+    return response.data;
+  },
+
+  updateLegalPolicy: async (slug: AdminLegalPolicy["slug"], data: Pick<AdminLegalPolicy, "title" | "intro" | "body">): Promise<AdminLegalPolicy> => {
+    const response = await api.put<AdminLegalPolicy>(`/api/v1/admin/legal-policies/${slug}`, data);
+    return response.data;
+  },
+
+  // GET /api/v1/admin/subscription-payment-proofs
+  listPendingSubscriptionPaymentProofs: async (): Promise<SubscriptionPaymentProof[]> => {
+    const response = await api.get("/api/v1/admin/subscription-payment-proofs");
+    return response.data;
+  },
+
+  listSubscriptionPaymentProofHistory: async (): Promise<SubscriptionPaymentProof[]> => {
+    const response = await api.get("/api/v1/admin/subscription-payment-proofs/history");
+    return response.data;
+  },
+
+  // POST /api/v1/admin/subscription-payment-proofs/:id/review
+  reviewSubscriptionPaymentProof: async (id: string, data: ReviewPaymentProofRequest): Promise<SubscriptionPaymentProof> => {
+    const response = await api.post(`/api/v1/admin/subscription-payment-proofs/${id}/review`, data);
+    return response.data;
+  },
+
+  revokeSubscriptionPaymentApproval: async (id: string, data: RevokePaymentApprovalRequest): Promise<SubscriptionPaymentProof> => {
+    const response = await api.post(`/api/v1/admin/subscription-payment-proofs/${id}/revoke-approval`, data);
+    return response.data;
+  },
+
+  getAdminSubscriptionDetails: async (organizationId: string): Promise<AdminSubscriptionDetails> => {
+    const response = await api.get(`/api/v1/admin/subscriptions/organizations/${organizationId}`);
+    return response.data;
+  },
+
+  cancelAdminSubscription: async (subscriptionId: string, reason: string): Promise<void> => {
+    await api.post(`/api/v1/admin/subscriptions/${subscriptionId}/cancel`, { reason });
+  },
 
   // GET /api/v1/admin/users
   listUsers: async (query?: DirectoryQuery): Promise<DirectoryPage<AdminUserResponse>> => {

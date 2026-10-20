@@ -2,6 +2,7 @@ use crate::domain::{
     advancement::Advancement,
     contestant::Contestant,
     pageant::AssignedPageant,
+    results::RoundResultEntry,
     round::Round,
     setup::{Category, Criterion},
 };
@@ -24,3 +25,6 @@ pub struct CriterionResponse(pub Criterion);
 #[derive(Debug, Serialize)]
 #[serde(transparent)]
 pub struct AdvancementResponse(pub Advancement);
+#[derive(Debug, Serialize)]
+#[serde(transparent)]
+pub struct RoundResultResponse(pub RoundResultEntry);

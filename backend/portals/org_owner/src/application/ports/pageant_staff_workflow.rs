@@ -4,7 +4,6 @@ use uuid::Uuid;
 
 use crate::domain::pageant_staff::{PageantStaffMember, PageantStaffRole};
 
-#[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait PageantStaffWorkflow: Send + Sync {
     async fn assign(
@@ -17,6 +16,7 @@ pub trait PageantStaffWorkflow: Send + Sync {
         last_name: Option<&str>,
         password_hash: Option<&str>,
         role: PageantStaffRole,
+        confirm_cross_organization_reuse: bool,
     ) -> Result<(PageantStaffMember, bool), AppError>;
 
     async fn list(
@@ -27,6 +27,20 @@ pub trait PageantStaffWorkflow: Send + Sync {
     ) -> Result<Vec<PageantStaffMember>, AppError>;
 
     async fn revoke(
+        &self,
+        organization_id: Uuid,
+        pageant_id: Uuid,
+        user_id: Uuid,
+        role: PageantStaffRole,
+    ) -> Result<(), AppError>;
+    async fn activate(
+        &self,
+        organization_id: Uuid,
+        pageant_id: Uuid,
+        user_id: Uuid,
+        role: PageantStaffRole,
+    ) -> Result<(), AppError>;
+    async fn delete_assignment(
         &self,
         organization_id: Uuid,
         pageant_id: Uuid,

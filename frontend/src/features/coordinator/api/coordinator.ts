@@ -4,16 +4,33 @@ import type {
   UpdatePageantRequest,
   CandidateResponse,
   AddCandidateRequest,
+  CandidatePlacements,
   CategoryResponse,
   CriterionResponse,
   CreateCategoryRequest,
   CreateCriterionRequest,
+  RoundJudgingConfiguration,
   RoundResponse,
   CreateRoundRequest,
   UpdateRoundRequest,
   PageantStaffResponse,
   AssignPageantStaffRequest,
+  CoordinatorResourceLimits,
 } from "@/src/types";
+
+export interface CoordinatorLeaderboardEntry {
+  contestantId: string;
+  contestantNumber: number;
+  contestantName: string;
+  gender: string | null;
+  photoUrl: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  eligibilityScope: string | null;
+  categoryWeight: string | null;
+  score: string | null;
+  submittedJudges: number;
+}
 
 const base = "/api/v1/coordinator";
 
@@ -30,6 +47,16 @@ export const coordinatorApi = {
   // GET /api/v1/coordinator/pageants/:pageantId
   getPageant: async (pageantId: string): Promise<PageantResponse> => {
     const res = await api.get(`${base}/pageants/${pageantId}`);
+    return res.data;
+  },
+
+  getResourceLimits: async (pageantId: string): Promise<CoordinatorResourceLimits> => {
+    const res = await api.get(`${base}/pageants/${pageantId}/resource-limits`);
+    return res.data;
+  },
+
+  getLeaderboard: async (pageantId: string, roundId: string): Promise<CoordinatorLeaderboardEntry[]> => {
+    const res = await api.get(`${base}/pageants/${pageantId}/rounds/${roundId}/leaderboard`);
     return res.data;
   },
 
@@ -57,6 +84,12 @@ export const coordinatorApi = {
   revokeJudge: async (pageantId: string, userId: string): Promise<void> => {
     await api.delete(`${base}/pageants/${pageantId}/judges/${userId}`);
   },
+  activateJudge: async (pageantId: string, userId: string): Promise<void> => {
+    await api.post(`${base}/pageants/${pageantId}/judges/${userId}/activate`);
+  },
+  deleteJudgeAssignment: async (pageantId: string, userId: string): Promise<void> => {
+    await api.delete(`${base}/pageants/${pageantId}/judges/${userId}/permanent`);
+  },
 
   // ─── Tabulators ────────────────────────────────────────────────────────────
 
@@ -75,6 +108,12 @@ export const coordinatorApi = {
   // DELETE /api/v1/coordinator/pageants/:pageantId/tabulators/:userId
   revokeTabulator: async (pageantId: string, userId: string): Promise<void> => {
     await api.delete(`${base}/pageants/${pageantId}/tabulators/${userId}`);
+  },
+  activateTabulator: async (pageantId: string, userId: string): Promise<void> => {
+    await api.post(`${base}/pageants/${pageantId}/tabulators/${userId}/activate`);
+  },
+  deleteTabulatorAssignment: async (pageantId: string, userId: string): Promise<void> => {
+    await api.delete(`${base}/pageants/${pageantId}/tabulators/${userId}/permanent`);
   },
 
   // ─── Contestants ───────────────────────────────────────────────────────────
@@ -107,6 +146,14 @@ export const coordinatorApi = {
   deactivateContestant: async (pageantId: string, contestantId: string): Promise<void> => {
     await api.delete(`${base}/pageants/${pageantId}/contestants/${contestantId}`);
   },
+  getContestantPlacements: async (pageantId: string, contestantId: string): Promise<CandidatePlacements> => {
+    const res = await api.get(`${base}/pageants/${pageantId}/contestants/${contestantId}/placements`);
+    return res.data;
+  },
+  saveContestantPlacements: async (pageantId: string, contestantId: string, data: CandidatePlacements): Promise<CandidatePlacements> => {
+    const res = await api.put(`${base}/pageants/${pageantId}/contestants/${contestantId}/placements`, data);
+    return res.data;
+  },
 
   // ─── Categories ────────────────────────────────────────────────────────────
 
@@ -138,12 +185,28 @@ export const coordinatorApi = {
   deactivateCategory: async (pageantId: string, categoryId: string): Promise<void> => {
     await api.delete(`${base}/pageants/${pageantId}/categories/${categoryId}`);
   },
+  activateCategory: async (pageantId: string, categoryId: string): Promise<void> => {
+    await api.post(`${base}/pageants/${pageantId}/categories/${categoryId}/activate`);
+  },
+  updateCategoryStatus: async (pageantId: string, categoryId: string, status: CategoryResponse["status"]): Promise<{ status: CategoryResponse["status"] }> => {
+    const res = await api.patch(`${base}/pageants/${pageantId}/categories/${categoryId}`, { status });
+    return res.data;
+  },
 
   // ─── Criteria ──────────────────────────────────────────────────────────────
 
   // GET /api/v1/coordinator/pageants/:pageantId/criteria
   listCriteria: async (pageantId: string): Promise<CriterionResponse[]> => {
     const res = await api.get(`${base}/pageants/${pageantId}/criteria`);
+    return res.data;
+  },
+
+  getRoundJudgingConfiguration: async (pageantId: string, roundId: string): Promise<RoundJudgingConfiguration> => {
+    const res = await api.get(`${base}/pageants/${pageantId}/rounds/${roundId}/judging-configuration`);
+    return res.data;
+  },
+  saveRoundJudgingConfiguration: async (pageantId: string, roundId: string, data: RoundJudgingConfiguration): Promise<RoundJudgingConfiguration> => {
+    const res = await api.put(`${base}/pageants/${pageantId}/rounds/${roundId}/judging-configuration`, data);
     return res.data;
   },
 
@@ -168,6 +231,9 @@ export const coordinatorApi = {
   // DELETE /api/v1/coordinator/pageants/:pageantId/criteria/:criterionId
   deactivateCriterion: async (pageantId: string, criterionId: string): Promise<void> => {
     await api.delete(`${base}/pageants/${pageantId}/criteria/${criterionId}`);
+  },
+  activateCriterion: async (pageantId: string, criterionId: string): Promise<void> => {
+    await api.post(`${base}/pageants/${pageantId}/criteria/${criterionId}/activate`);
   },
 
   // ─── Rounds ────────────────────────────────────────────────────────────────

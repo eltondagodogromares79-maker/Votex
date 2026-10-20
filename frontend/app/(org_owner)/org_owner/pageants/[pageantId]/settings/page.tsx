@@ -8,12 +8,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import OrgPageShell from "@/src/features/org_owner/components/OrgPageShell";
 import { Button } from "@/src/components/ui/Button";
+import { CloudinaryImageUpload } from "@/src/components/ui/CloudinaryImageUpload";
 import { ConfirmModal } from "@/src/components/ui/Modal";
 import { useSession } from "@/src/features/auth/context/SessionContext";
 import {
   usePageant,
   useUpdatePageant,
   useArchivePageant,
+  usePublishPageant,
 } from "@/src/features/org_owner/hooks/usePageants";
 import { useToast } from "@/src/components/ui/Toast";
 import { ApiError } from "@/src/lib/api/client";
@@ -26,6 +28,7 @@ const settingsSchema = z.object({
     .min(3, "Slug must be at least 3 characters").max(100)
     .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]{1,2}$/, "Lowercase letters, numbers, hyphens only"),
   description: z.string().max(1000).optional().or(z.literal("")),
+  logoUrl: z.string().url("Upload a valid pageant image.").optional().or(z.literal("")),
   venue:       z.string().max(300).optional().or(z.literal("")),
   eventDate:   z.string().optional().or(z.literal("")),
   startTime:   z.string().optional().or(z.literal("")),
@@ -98,9 +101,12 @@ export default function PageantSettingsPage({
   const { data: pageant, isLoading, isError } = usePageant(orgId, pageantId);
   const updateMutation  = useUpdatePageant(orgId, pageantId);
   const archiveMutation = useArchivePageant(orgId);
+  const publishMutation = usePublishPageant(orgId, pageantId);
 
   const [showArchive, setShowArchive] = useState(false);
+  const [showPublish, setShowPublish] = useState(false);
   const [saved,       setSaved]       = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
 
   const form = useForm<SettingsFormValues>({ resolver: zodResolver(settingsSchema) });
 
@@ -110,6 +116,7 @@ export default function PageantSettingsPage({
       name:        pageant.name,
       slug:        pageant.slug,
       description: pageant.description ?? "",
+      logoUrl:     pageant.logoUrl ?? "",
       venue:       pageant.venue ?? "",
       eventDate:   pageant.eventDate ?? "",
       startTime:   toTimeInput(pageant.startTime),
@@ -126,6 +133,7 @@ export default function PageantSettingsPage({
         name:        data.name,
         slug:        data.slug,
         description: data.description || null,
+        logoUrl:     data.logoUrl || null,
         venue:       data.venue || null,
         eventDate:   data.eventDate || null,
         startTime:   data.startTime || null,
@@ -146,6 +154,16 @@ export default function PageantSettingsPage({
       router.replace("/org_owner/pageants");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.userMessage : "Failed to archive pageant.");
+    }
+  }
+
+  async function onPublish() {
+    try {
+      await publishMutation.mutateAsync();
+      setShowPublish(false);
+      toast.success(`"${pageant?.name}" is now published. Its coordinator can open the dashboard.`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.userMessage : "Failed to publish pageant.");
     }
   }
 
@@ -199,6 +217,24 @@ export default function PageantSettingsPage({
     >
       <div className="space-y-6">
 
+        <Section title="Pageant status" description="Publishing makes the coordinator dashboard available for this pageant.">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-small font-semibold text-charcoal">Current status: {pageant.status.toUpperCase()}</p>
+              <p className="mt-1 max-w-2xl text-caption leading-relaxed text-muted">
+                {pageant.status.toUpperCase() === "DRAFT"
+                  ? "The assigned coordinator cannot open the dashboard until you publish this pageant. Public visibility is controlled separately below."
+                  : "This pageant has been published. Public visibility is controlled separately in General settings."}
+              </p>
+            </div>
+            {pageant.status.toUpperCase() === "DRAFT" ? (
+              <Button type="button" variant="secondary" size="sm" onClick={() => setShowPublish(true)} loading={publishMutation.isPending}>
+                Publish pageant
+              </Button>
+            ) : <span className="inline-flex items-center border border-success/25 bg-success/5 px-3 py-2 text-xs font-semibold text-success">Published</span>}
+          </div>
+        </Section>
+
         {/* ── General ──────────────────────────────────────────────────── */}
         <Section title="General" description="Name, slug, description, and visibility settings.">
           <form onSubmit={form.handleSubmit(onSave)} noValidate className="space-y-5">
@@ -217,6 +253,16 @@ export default function PageantSettingsPage({
               <textarea className={fieldTextarea} {...form.register("description")} />
             </Field>
 
+            <Field label="Pageant image" hint="Optional · PNG, JPG, or WebP up to 10 MB">
+              <CloudinaryImageUpload
+                folder="pageant-images"
+                value={form.watch("logoUrl")}
+                label="Upload pageant image"
+                onUploadingChange={setImageUploading}
+                onChange={(url) => form.setValue("logoUrl", url, { shouldDirty: true, shouldValidate: true })}
+              />
+            </Field>
+
             <div className="flex items-center gap-3 py-3 px-4 bg-slate/30 border border-border">
               <input type="checkbox" id="settings-public" {...form.register("isPublic")}
                 className="w-4 h-4 accent-navy shrink-0" />
@@ -226,7 +272,7 @@ export default function PageantSettingsPage({
             </div>
 
             <div className="flex items-center gap-3 pt-2 border-t border-border">
-              <Button type="submit" variant="secondary" size="sm" loading={isSubmitting}>
+              <Button type="submit" variant="secondary" size="sm" loading={isSubmitting} disabled={imageUploading}>
                 Save Changes
               </Button>
               <Button type="button" variant="ghost" size="sm" disabled={isSubmitting}
@@ -264,7 +310,7 @@ export default function PageantSettingsPage({
               </Field>
             </div>
             <div className="flex items-center gap-3 pt-2 border-t border-border">
-              <Button type="submit" variant="secondary" size="sm" loading={isSubmitting}>
+              <Button type="submit" variant="secondary" size="sm" loading={isSubmitting} disabled={imageUploading}>
                 Save Schedule
               </Button>
             </div>
@@ -287,7 +333,7 @@ export default function PageantSettingsPage({
               <div>
                 <p className="text-small font-semibold text-charcoal">Archive this pageant</p>
                 <p className="text-caption text-muted mt-0.5 leading-relaxed">
-                  The pageant will be set to archived status. It will no longer appear in your active pageants list and cannot be restored from the dashboard.
+                  Only an untouched pageant can be archived. Once staff, rounds, or categories are added, the pageant is locked and continues to use one pageant slot.
                 </p>
               </div>
               <Button
@@ -311,10 +357,20 @@ export default function PageantSettingsPage({
         onClose={() => setShowArchive(false)}
         onConfirm={onArchive}
         title="Archive Pageant"
-        description={`Archive "${pageant.name}"? It will be deactivated and you will be returned to the pageants list.`}
+        description={`Archive "${pageant.name}"? Only untouched pageants can be archived. Configured pageants keep their plan slot.`}
         confirmLabel="Archive"
         loading={archiveMutation.isPending}
         destructive
+      />
+
+      <ConfirmModal
+        open={showPublish}
+        onClose={() => setShowPublish(false)}
+        onConfirm={onPublish}
+        title="Publish Pageant"
+        description={`Publish "${pageant.name}"? The assigned coordinator will be able to open and manage its dashboard. Public visibility will still follow the setting you choose above.`}
+        confirmLabel="Publish pageant"
+        loading={publishMutation.isPending}
       />
 
     </OrgPageShell>

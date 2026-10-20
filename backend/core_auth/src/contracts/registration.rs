@@ -8,16 +8,15 @@ use validator::Validate;
 
 /// Request body for registering a new organization owner.
 ///
-/// Endpoint:
-///     POST /api/v1/auth/register/org-owner
+/// Endpoint: `POST /api/v1/auth/register/org-owner`.
 ///
 /// This request creates the following records as one business operation:
 ///
-///     1. User
-///     2. Organization
-///     3. OrganizationMember
-///     4. OrganizationMemberRole (ORG_OWNER)
-///     5. UserEmailVerificationToken
+/// - User
+/// - Organization
+/// - OrganizationMember
+/// - OrganizationMemberRole (ORG_OWNER)
+/// - UserEmailVerificationToken
 ///
 /// The request intentionally does NOT accept internal identifiers such as:
 /// - user_id
@@ -120,8 +119,7 @@ pub struct RegisterOrgOwnerRequest {
     /// This is separate from the owner's login email.
     ///
     /// Example:
-    ///     owner@gmail.com
-    ///     organization@gmail.com
+    /// `owner@example.com` or `organization@example.com`.
     ///
     /// The owner's email is stored in users.email.
     /// This value is stored in organizations.email.
@@ -143,14 +141,13 @@ pub struct RegisterOrgOwnerRequest {
 
 /// Request body for registering a normal audience account.
 ///
-/// Endpoint:
-///     POST /api/v1/auth/register/audience
+/// Endpoint: `POST /api/v1/auth/register/audience`.
 ///
 /// Audience registration creates:
 ///
-///     1. User
-///     2. AudienceVoter
-///     3. UserEmailVerificationToken
+/// - User
+/// - AudienceVoter
+/// - UserEmailVerificationToken
 ///
 /// The account is created immediately and starts with an unverified email.
 /// Email verification is therefore a capability/state transition rather

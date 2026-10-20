@@ -8,7 +8,9 @@ use validator::Validate;
 use crate::{
     application::pageant_setup::PageantSetupApplication,
     contracts::pageant_setup::{
-        CategoryRequest, CategoryResponse, CriterionRequest, CriterionResponse,
+        CategoryRequest, CategoryResponse, CategoryStatusRequest, CategoryStatusResponse,
+        CriterionRequest, CriterionResponse, LeaderboardEntryResponse,
+        RoundJudgingConfigurationRequest, RoundJudgingConfigurationResponse,
     },
 };
 
@@ -27,6 +29,63 @@ pub struct CategoryPath {
 pub struct CriterionPath {
     pageant_id: Uuid,
     criterion_id: Uuid,
+}
+
+#[derive(Deserialize)]
+pub struct RoundConfigurationPath {
+    pageant_id: Uuid,
+    round_id: Uuid,
+}
+
+#[derive(Deserialize)]
+pub struct LeaderboardPath {
+    pageant_id: Uuid,
+    round_id: Uuid,
+}
+
+pub async fn get_leaderboard(
+    request: HttpRequest,
+    application: web::Data<PageantSetupApplication>,
+    path: web::Path<LeaderboardPath>,
+) -> Result<HttpResponse, AppError> {
+    let entries = application
+        .get_leaderboard(actor_id(&request)?, path.pageant_id, path.round_id)
+        .await?;
+    Ok(HttpResponse::Ok().json(
+        entries
+            .into_iter()
+            .map(LeaderboardEntryResponse::from)
+            .collect::<Vec<_>>(),
+    ))
+}
+
+pub async fn get_round_configuration(
+    request: HttpRequest,
+    application: web::Data<PageantSetupApplication>,
+    path: web::Path<RoundConfigurationPath>,
+) -> Result<HttpResponse, AppError> {
+    let value = application
+        .get_round_configuration(actor_id(&request)?, path.pageant_id, path.round_id)
+        .await?;
+    Ok(HttpResponse::Ok().json(RoundJudgingConfigurationResponse::from(value)))
+}
+
+pub async fn save_round_configuration(
+    request: HttpRequest,
+    application: web::Data<PageantSetupApplication>,
+    path: web::Path<RoundConfigurationPath>,
+    body: web::Json<RoundJudgingConfigurationRequest>,
+) -> Result<HttpResponse, AppError> {
+    body.validate()?;
+    let value = application
+        .save_round_configuration(
+            actor_id(&request)?,
+            path.pageant_id,
+            path.round_id,
+            body.into_inner(),
+        )
+        .await?;
+    Ok(HttpResponse::Ok().json(RoundJudgingConfigurationResponse::from(value)))
 }
 
 fn actor_id(request: &HttpRequest) -> Result<Uuid, AppError> {
@@ -106,6 +165,34 @@ pub async fn deactivate_category(
     Ok(HttpResponse::NoContent().finish())
 }
 
+pub async fn activate_category(
+    request: HttpRequest,
+    application: web::Data<PageantSetupApplication>,
+    path: web::Path<CategoryPath>,
+) -> Result<HttpResponse, AppError> {
+    application
+        .activate_category(actor_id(&request)?, path.pageant_id, path.category_id)
+        .await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+pub async fn update_category_status(
+    request: HttpRequest,
+    application: web::Data<PageantSetupApplication>,
+    path: web::Path<CategoryPath>,
+    body: web::Json<CategoryStatusRequest>,
+) -> Result<HttpResponse, AppError> {
+    let status = application
+        .update_category_status(
+            actor_id(&request)?,
+            path.pageant_id,
+            path.category_id,
+            body.status.clone(),
+        )
+        .await?;
+    Ok(HttpResponse::Ok().json(CategoryStatusResponse { status }))
+}
+
 pub async fn list_criteria(
     request: HttpRequest,
     application: web::Data<PageantSetupApplication>,
@@ -171,6 +258,17 @@ pub async fn deactivate_criterion(
 ) -> Result<HttpResponse, AppError> {
     application
         .deactivate_criterion(actor_id(&request)?, path.pageant_id, path.criterion_id)
+        .await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+pub async fn activate_criterion(
+    request: HttpRequest,
+    application: web::Data<PageantSetupApplication>,
+    path: web::Path<CriterionPath>,
+) -> Result<HttpResponse, AppError> {
+    application
+        .activate_criterion(actor_id(&request)?, path.pageant_id, path.criterion_id)
         .await?;
     Ok(HttpResponse::NoContent().finish())
 }

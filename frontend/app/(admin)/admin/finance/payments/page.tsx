@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import AdminPageShell from "@/src/features/admin/components/AdminPageShell";
 import { useTransactionLogs } from "@/src/features/admin/hooks/useAuditLogs";
 
@@ -33,9 +34,9 @@ export default function AdminPaymentsPage() {
 
   return (
     <AdminPageShell
-      title="Payments"
-      subtitle="All platform transaction logs."
-      breadcrumbs={[{ label: "Dashboard", href: "/admin/dashboard" }, { label: "Finance" }, { label: "Payments" }]}
+      title="Transactions"
+      subtitle="Review subscription billing and payment transactions across organizations."
+      breadcrumbs={[{ label: "Dashboard", href: "/admin/dashboard" }, { label: "Finance" }, { label: "Transactions" }]}
     >
       {/* Filters */}
       <div className="flex gap-3 mb-5">
@@ -70,6 +71,7 @@ export default function AdminPaymentsPage() {
               <p className="w-24 text-caption text-muted uppercase tracking-[0.08em]">Status</p>
               <p className="w-32 text-right text-caption text-muted uppercase tracking-[0.08em]">Amount</p>
               <p className="w-32 text-right text-caption text-muted uppercase tracking-[0.08em]">Date</p>
+              <p className="w-48 text-right text-caption text-muted uppercase tracking-[0.08em]">Details</p>
             </div>
 
             {items.length === 0 && (
@@ -100,6 +102,18 @@ export default function AdminPaymentsPage() {
                       </p>
                     : <p className="text-caption text-muted">—</p>
                   }
+                </div>
+                <div className="w-48 shrink-0 text-right">
+                  {tx.organizationId ? (
+                    <Link
+                      href={`/admin/finance/subscriptions/${tx.organizationId}`}
+                      className="inline-flex h-9 items-center justify-center rounded bg-navy px-3 text-caption font-semibold text-white hover:bg-navy/90 transition-colors"
+                    >
+                      View transaction details
+                    </Link>
+                  ) : (
+                    <span className="text-caption text-muted">No organization details</span>
+                  )}
                 </div>
                 <div className="w-32 text-right shrink-0">
                   <p className="text-caption text-muted">

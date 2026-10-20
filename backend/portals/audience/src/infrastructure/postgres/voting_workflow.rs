@@ -193,7 +193,8 @@ impl VotingWorkflow for PostgresVotingWorkflow {
         sqlx::query("INSERT INTO transaction_logs(transaction_type,organization_id,pageant_id,actor_user_id,reference_type,reference_id,status,amount,currency,metadata,completed_at) SELECT 'VOTE'::business_transaction_type,p.organization_id,$1,$2,'AUDIENCE_VOTE',$3,CASE WHEN $4 THEN 'COMPLETED'::business_transaction_status ELSE 'PENDING'::business_transaction_status END,$5,$6,jsonb_build_object('package_id',$7,'vote_quantity',$8),CASE WHEN $4 THEN now() END FROM pageants p WHERE p.id=$1")
             .bind(pageant).bind(user).bind(id).bind(free).bind(package_row.price_amount).bind(package_row.currency.trim()).bind(package).bind(package_row.vote_quantity).execute(&mut *tx).await.map_err(db)?;
         if free {
-            sqlx::query("INSERT INTO audience_vote_totals(voting_configuration_id,contestant_id,total_votes) VALUES($1,$2,$3) ON CONFLICT(voting_configuration_id,contestant_id) DO UPDATE SET total_votes=audience_vote_totals.total_votes+EXCLUDED.total_votes,updated_at=now()").bind(config.0).bind(candidate).bind(package_row.vote_quantity as i64).execute(&mut *tx).await.map_err(db)?;
+            sqlx::query("SELECT public.votex_add_vote_total($1)")
+                .bind(id).execute(&mut *tx).await.map_err(db)?;
         }
         tx.commit().await.map_err(db)?;
         let minor = (package_row.price_amount * Decimal::from(100))
@@ -257,7 +258,7 @@ impl VotingWorkflow for PostgresVotingWorkflow {
         }
         sqlx::query("UPDATE audience_vote_transactions SET status='VALID',paid_at=now(),verified_at=now(),provider_payment_id=$2 WHERE id=$1 AND status='PENDING'").bind(vote_id).bind(payment_id).execute(&mut *tx).await.map_err(db)?;
         sqlx::query("UPDATE transaction_logs SET status='COMPLETED',metadata=metadata||jsonb_build_object('provider','PAYMONGO','paymongo_payment_id',$2),completed_at=now() WHERE reference_type='AUDIENCE_VOTE' AND reference_id=$1 AND status='PENDING'").bind(vote_id).bind(payment_id).execute(&mut *tx).await.map_err(db)?;
-        sqlx::query("INSERT INTO audience_vote_totals(voting_configuration_id,contestant_id,total_votes) VALUES($1,$2,$3) ON CONFLICT(voting_configuration_id,contestant_id) DO UPDATE SET total_votes=audience_vote_totals.total_votes+EXCLUDED.total_votes,updated_at=now()").bind(config).bind(candidate).bind(quantity as i64).execute(&mut *tx).await.map_err(db)?;
+        sqlx::query("SELECT public.votex_add_vote_total($1)").bind(vote_id).execute(&mut *tx).await.map_err(db)?;
         tx.commit().await.map_err(db)?;
         Ok(true)
     }

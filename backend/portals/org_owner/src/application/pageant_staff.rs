@@ -69,6 +69,7 @@ impl PageantStaffApplication {
                 last_name,
                 password_hash.as_deref(),
                 role,
+                request.confirm_cross_organization_reuse,
             )
             .await?;
         if let (Some(password), true) = (temporary_password, account_created) {
@@ -78,11 +79,14 @@ impl PageantStaffApplication {
                 PageantStaffRole::Coordinator => unreachable!(),
             };
             self.email_sender
-                .send_staff_credentials_email(
+                .send_pageant_staff_credentials_email(
                     &member.email,
                     &member.first_name,
                     role_name,
                     &password,
+                    &member.pageant_name,
+                    member.pageant_id,
+                    &member.pageant_slug,
                 )
                 .await?;
         }
@@ -107,6 +111,30 @@ impl PageantStaffApplication {
     ) -> Result<(), AppError> {
         self.workflow
             .revoke(organization_id, pageant_id, user_id, role)
+            .await
+    }
+
+    pub async fn activate(
+        &self,
+        organization_id: Uuid,
+        pageant_id: Uuid,
+        user_id: Uuid,
+        role: PageantStaffRole,
+    ) -> Result<(), AppError> {
+        self.workflow
+            .activate(organization_id, pageant_id, user_id, role)
+            .await
+    }
+
+    pub async fn delete_assignment(
+        &self,
+        organization_id: Uuid,
+        pageant_id: Uuid,
+        user_id: Uuid,
+        role: PageantStaffRole,
+    ) -> Result<(), AppError> {
+        self.workflow
+            .delete_assignment(organization_id, pageant_id, user_id, role)
             .await
     }
 }

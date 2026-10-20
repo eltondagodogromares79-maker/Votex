@@ -4,6 +4,7 @@ import { useState } from "react";
 import AdminPageShell from "@/src/features/admin/components/AdminPageShell";
 import { Modal, ConfirmModal } from "@/src/components/ui/Modal";
 import { Button } from "@/src/components/ui/Button";
+import { ApiError } from "@/src/lib/api/client";
 import {
   useSubscriptionPlans,
   useCreateSubscriptionPlan,
@@ -120,19 +121,19 @@ function PlanFormFields({ form, onChange, error }: {
 
       {/* Identification */}
       <FormSection title="Plan Identity">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className={LBL}>Code <span className="text-gold">*</span></label>
-            <input className={INP} placeholder="BASIC_MONTHLY" value={form.code} onChange={set("code")}
-              style={{ textTransform: "uppercase" }} />
-            <p className="text-caption text-white/30 mt-1">Uppercase letters, numbers, underscores.</p>
+            <input className={INP} placeholder="BASIC_MONTHLY" value={form.code} maxLength={50}
+              onChange={(event) => onChange({ ...form, code: event.target.value.toUpperCase().replace(/[^A-Z0-9_]+/g, "_") })} />
+            <p className="text-caption text-white/30 mt-1">Uppercase letters and numbers. Spaces or symbols become underscores.</p>
           </div>
           <div>
             <label className={LBL}>Display Name <span className="text-gold">*</span></label>
             <input className={INP} placeholder="Basic Monthly" value={form.name} onChange={set("name")} />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4 mt-4">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className={LBL}>Billing Kind <span className="text-gold">*</span></label>
             <select className={SEL} value={form.kind} onChange={set("kind")}>
@@ -146,7 +147,7 @@ function PlanFormFields({ form, onChange, error }: {
             <input className={INP} placeholder="PHP" value={form.currency} onChange={set("currency")} maxLength={3} />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4 mt-4">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className={LBL}>Price <span className="text-gold">*</span></label>
             <input type="text" inputMode="decimal" className={INP} placeholder="999.00"
@@ -163,7 +164,7 @@ function PlanFormFields({ form, onChange, error }: {
 
       {/* Org-level limits */}
       <FormSection title="Organization Limits — leave blank for unlimited">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className={LBL}>Max Pageants</label>
             <input type="number" min={1} className={INP} placeholder="Unlimited"
@@ -179,7 +180,7 @@ function PlanFormFields({ form, onChange, error }: {
 
       {/* Per-pageant limits */}
       <FormSection title="Per-Pageant Limits — leave blank for unlimited">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <div>
             <label className={LBL}>Max Judges</label>
             <input type="number" min={1} className={INP} placeholder="Unlimited"
@@ -191,7 +192,7 @@ function PlanFormFields({ form, onChange, error }: {
               value={form.maxRoundsPerPageant} onChange={set("maxRoundsPerPageant")} />
           </div>
           <div>
-            <label className={LBL}>Max Categories / Round</label>
+            <label className={LBL}>Max Categories / round</label>
             <input type="number" min={1} className={INP} placeholder="Unlimited"
               value={form.maxCategoriesPerRound} onChange={set("maxCategoriesPerRound")} />
           </div>
@@ -360,12 +361,12 @@ function PlanCard({
       {/* Actions */}
       <div className="flex items-center gap-2 px-5 py-3 border-t border-border">
         <button onClick={() => onEdit(plan)}
-          className="flex-1 h-8 text-caption font-medium text-navy bg-navy/8 hover:bg-navy/15 transition-colors">
+          className="flex-1 h-9 rounded bg-navy px-3 text-caption font-semibold text-white hover:bg-navy/90 transition-colors">
           Edit
         </button>
         {plan.isActive && (
           <button onClick={() => onDeactivate(plan)}
-            className="flex-1 h-8 text-caption font-medium text-error bg-error/8 hover:bg-error/15 transition-colors">
+            className="flex-1 h-9 rounded bg-error px-3 text-caption font-semibold text-white hover:bg-error/90 transition-colors">
             Deactivate
           </button>
         )}
@@ -397,7 +398,18 @@ export default function AdminPlansPage() {
     const err = validate(addForm); if (err) { setFormErr(err); return; }
     setFormErr(null);
     try { await createMut.mutateAsync(toRequest(addForm)); setAddOpen(false); setAddForm(EMPTY); }
-    catch { setFormErr("Failed to create plan. The code may already exist."); }
+    catch (error) {
+      if (error instanceof ApiError) {
+        const errorId = typeof error.body === "object" && error.body !== null && "errorId" in error.body
+          ? String((error.body as { errorId: unknown }).errorId)
+          : null;
+        setFormErr(error.status >= 500
+          ? `${error.userMessage}${errorId ? ` Reference: ${errorId}` : " Check the backend log for the error details."}`
+          : error.userMessage);
+      } else {
+        setFormErr(error instanceof Error ? error.message : "Failed to create plan.");
+      }
+    }
   }
 
   async function handleEdit() {

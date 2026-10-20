@@ -7,10 +7,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 
-import {
-  AuthLogoBrandPanel,
-  AuthLogoMobile,
-} from "@/src/features/auth/components/AuthLogo";
+import { AuthLogoBrandPanel } from "@/src/features/auth/components/AuthLogo";
 
 import {
   loginSchema,
@@ -18,12 +15,13 @@ import {
 } from "@/src/lib/validations/auth";
 
 import { useToast } from "@/src/components/ui/Toast";
-import { ROLE_HOME } from "@/src/config/permissions";
+import { ROLE_ALLOWED_PREFIXES, ROLE_HOME } from "@/src/config/permissions";
 import { EyeIcon } from "@/src/features/auth/components/register/AuthIcons";
 import { cn } from "@/src/lib/utils";
 import type { FrontendRole } from "@/src/lib/auth/roles";
 
-import { ApiError } from "@/src/lib/api/client";
+import { ApiError, setAccessToken } from "@/src/lib/api/client";
+import { authApi } from "@/src/features/auth/api/authentication";
 import { useLogin } from "../../hooks/useLogin";
 import { useSession } from "../../context/SessionContext";
 
@@ -194,16 +192,29 @@ const ROLE_COPY: Record<
 
 interface SignInFormInnerProps {
   role: FrontendRole;
+  generalLogin?: boolean;
+  adminOnly?: boolean;
+  pageantStaffLogin?: boolean;
+  unifiedOrganization?: boolean;
+  pageantName?: string;
+  staffPageantId?: string;
 }
 
 function SignInFormInner({
   role,
+  generalLogin = false,
+  adminOnly = false,
+  pageantStaffLogin = false,
+  unifiedOrganization = false,
+  pageantName,
+  staffPageantId,
 }: SignInFormInnerProps) {
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect");
 
   const { toast } = useToast();
   const [showPw, setShowPw] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const login = useLogin();
   const { setCurrentUser } = useSession();
@@ -226,14 +237,63 @@ function SignInFormInner({
     resolver: zodResolver(loginSchema),
   });
 
-  const copy = ROLE_COPY[role];
+  const copy = pageantStaffLogin
+    ? {
+        ...ROLE_COPY.judge,
+        eyebrow: "Pageant staff sign-in",
+        title: "Welcome back",
+        subtitle: "Sign in to open your assigned pageant as a judge or tabulator.",
+      }
+    : generalLogin
+    ? {
+        ...ROLE_COPY.audience,
+        eyebrow: "Sign in to your VoteX account",
+        subtitle: "Use one account to access your audience profile, organization, or assigned pageants.",
+        note: undefined,
+        registerHref: undefined,
+        registerLabel: undefined,
+      }
+    : unifiedOrganization
+    ? {
+        ...ROLE_COPY.org_owner,
+        eyebrow: "Organization owner & coordinator sign-in",
+        subtitle: "Sign in to manage your organization or the pageants assigned to you.",
+        note: undefined,
+      }
+    : ROLE_COPY[role];
 
   async function onSubmit(data: LoginFormValues) {
+    setSubmitError(null);
     try {
       const currentUser = await login.mutateAsync({
         email: data.email,
         password: data.password,
       });
+
+      const roleIsAllowed = adminOnly
+        ? currentUser.role === "admin"
+        : !generalLogin || currentUser.role !== "admin";
+      if (!roleIsAllowed) {
+        try {
+          await authApi.logout();
+        } catch {
+          // Clear local auth state even if the logout request cannot reach the server.
+        } finally {
+          setAccessToken(null);
+          document.cookie = "at_hint=; path=/; Max-Age=0";
+        }
+        toast.error(
+          adminOnly
+            ? "This sign-in page is for platform administrators only."
+            : "Platform administrators must sign in through the administrator sign-in page.",
+        );
+        setSubmitError(
+          adminOnly
+            ? "This sign-in page is for platform administrators only."
+            : "Platform administrators must sign in through the administrator sign-in page.",
+        );
+        return;
+      }
 
       // Write the role hint cookie using the role verified by the backend
       // (not the role prop, which is just the login page's UI hint).
@@ -249,11 +309,33 @@ function SignInFormInner({
       // Hard navigate so the browser sends the fresh at_hint cookie on the
       // very next request — router.push is a client transition and the proxy
       // would still see the old/missing cookie.
-      window.location.href = redirect ?? ROLE_HOME[currentUser.role];
+      const pageantDestination = staffPageantId
+        ? currentUser.role === "judge"
+          ? `/judge/pageants/${encodeURIComponent(staffPageantId)}/score`
+          : currentUser.role === "tabulator"
+            ? `/tabulator/pageants/${encodeURIComponent(staffPageantId)}/live`
+            : null
+        : null;
+      let safeRedirect: string | null = null;
+      if (redirect) {
+        try {
+          const target = new URL(redirect, window.location.origin);
+          const roleCanVisitTarget = ROLE_ALLOWED_PREFIXES[currentUser.role].some(
+            (prefix) => target.pathname === prefix || target.pathname.startsWith(`${prefix}/`),
+          );
+          if (target.origin === window.location.origin && roleCanVisitTarget) {
+            safeRedirect = `${target.pathname}${target.search}${target.hash}`;
+          }
+        } catch {
+          safeRedirect = null;
+        }
+      }
+      window.location.href = pageantDestination ?? safeRedirect ?? ROLE_HOME[currentUser.role];
     } catch (error) {
       if (error instanceof ApiError) {
         const code = error.code;
         const message = error.userMessage;
+        setSubmitError(message);
 
         if (code === "INVALID_CREDENTIALS") {
           toast.error(message);
@@ -289,6 +371,7 @@ function SignInFormInner({
       toast.error(
         "Network error. Check your connection and try again.",
       );
+      setSubmitError("Network error. Check your connection and try again.");
     }
   }
 
@@ -324,11 +407,6 @@ function SignInFormInner({
       {/* RIGHT FORM PANEL */}
       <div className="flex-1 lg:w-7/12 xl:w-[55%] bg-navy flex flex-col">
 
-        {/* MOBILE TOP BAR */}
-        <div className="lg:hidden h-14 flex items-center px-6 border-b border-white/8">
-          <AuthLogoMobile />
-        </div>
-
         <div
           className="
             flex-1 flex items-center justify-center
@@ -340,7 +418,7 @@ function SignInFormInner({
 
             {/* BACK */}
             <Link
-              href="/login"
+              href="/"
               className="
                 inline-flex items-center gap-1.5
                 text-caption text-white/40
@@ -367,11 +445,12 @@ function SignInFormInner({
                 />
               </svg>
 
-              All sign-in options
+              Back to home
             </Link>
 
             {/* HEADING */}
             <div className="mb-8">
+              {pageantName ? <p className="mb-3 font-serif text-lg font-semibold text-white">{pageantName}</p> : null}
               <p
                 className="
                   text-caption font-semibold uppercase
@@ -403,6 +482,12 @@ function SignInFormInner({
               noValidate
               className="space-y-4"
             >
+
+              {submitError ? (
+                <div role="alert" aria-live="assertive" className="border border-error/40 bg-error/10 px-4 py-3 text-small leading-relaxed text-red-100">
+                  {submitError}
+                </div>
+              ) : null}
 
               {/* EMAIL */}
               <NavyInput
@@ -532,7 +617,25 @@ function SignInFormInner({
             )}
 
             {/* REGISTER LINK */}
-            {copy.registerHref && (
+            {generalLogin ? (
+              <>
+                <div className="flex items-center gap-3 mt-5">
+                  <div className="flex-1 h-px bg-white/12" />
+                  <span className="text-caption text-white/35">or</span>
+                  <div className="flex-1 h-px bg-white/12" />
+                </div>
+                <p className="text-center text-small text-white/45 mt-5">
+                  New to VoteX?{" "}
+                  <Link href="/register" className="text-gold font-semibold hover:underline underline-offset-2">
+                    Register as an Org Owner
+                  </Link>
+                  {" "}or{" "}
+                  <Link href="/register/audience" className="text-gold font-semibold hover:underline underline-offset-2">
+                    join as Audience
+                  </Link>
+                </p>
+              </>
+            ) : copy.registerHref ? (
               <>
                 <div className="flex items-center gap-3 mt-5">
                   <div className="flex-1 h-px bg-white/12" />
@@ -557,7 +660,7 @@ function SignInFormInner({
                   </Link>
                 </p>
               </>
-            )}
+            ) : null}
 
             {/* LEGAL */}
             <div className="flex items-center justify-center gap-3 mt-8">
@@ -611,10 +714,16 @@ function SignInFormInner({
 
 export function SignInForm({
   role,
+  generalLogin,
+  adminOnly,
+  pageantStaffLogin,
+  unifiedOrganization,
+  pageantName,
+  staffPageantId,
 }: SignInFormInnerProps) {
   return (
     <Suspense>
-      <SignInFormInner role={role} />
+      <SignInFormInner role={role} generalLogin={generalLogin} adminOnly={adminOnly} pageantStaffLogin={pageantStaffLogin} unifiedOrganization={unifiedOrganization} pageantName={pageantName} staffPageantId={staffPageantId} />
     </Suspense>
   );
 }

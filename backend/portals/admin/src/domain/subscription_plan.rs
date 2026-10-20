@@ -15,7 +15,7 @@ impl SubscriptionPlanKind {
         match self {
             Self::OneTime => "ONE_TIME",
             Self::Premium => "PREMIUM",
-            Self::Custom  => "CUSTOM",
+            Self::Custom => "CUSTOM",
         }
     }
 }

@@ -66,19 +66,29 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           throw new Error(`Unrecognised role: "${me.role}"`);
         }
 
+        // The proxy uses this readable hint to allow the initial request to
+        // protected dashboard pages. Restore it alongside the HttpOnly
+        // refresh session so a valid returning session is not sent back to
+        // sign-in when navigating from a public page.
+        document.cookie = `at_hint=${me.role}; path=/; SameSite=Lax; Max-Age=${60 * 60 * 24}`;
+
         setCurrentUserState({
           userId: me.userId,
           email: me.email,
+          pendingEmail: me.pendingEmail,
           firstName: me.firstName,
           lastName: me.lastName,
           role: me.role,
           organizationId: me.organizationId,
           profileImageUrl: me.profileImageUrl,
+          emailVerifiedAt: me.emailVerifiedAt,
+          mustChangePassword: me.mustChangePassword,
         });
       } catch {
         // No valid session — clear any stale token
         setAccessToken(null);
         setCurrentUserState(null);
+        document.cookie = "at_hint=; path=/; Max-Age=0; SameSite=Lax";
       } finally {
         setIsLoading(false);
         setIsReady(true);

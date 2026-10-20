@@ -12,10 +12,13 @@ import { Button } from "@/src/components/ui/Button";
 import { Modal, ConfirmModal } from "@/src/components/ui/Modal";
 import { useSession } from "@/src/features/auth/context/SessionContext";
 import { usePageants } from "@/src/features/org_owner/hooks/usePageants";
+import { useSubscriptionUsage } from "@/src/features/org_owner/hooks/useSubscription";
 import {
   usePageantJudges,
   useAssignJudge,
   useRevokeJudge,
+  useSetPageantJudgeActive,
+  useDeletePageantJudgeAssignment,
 } from "@/src/features/org_owner/hooks/usePageantStaff";
 import { useToast } from "@/src/components/ui/Toast";
 import { ApiError } from "@/src/lib/api/client";
@@ -109,6 +112,7 @@ export default function JudgesPage() {
   const { toast } = useToast();
 
   const { data: pageants = [], isLoading: pageantsLoading } = usePageants(orgId);
+  const { data: planUsage, isLoading: usageLoading } = useSubscriptionUsage(orgId);
 
   // ── Fan-out results map: pageantId → judges ───────────────────────────────
   const [judgesMap, setJudgesMap] = useState<Map<string, { name: string; judges: PageantStaffResponse[] }>>(new Map());
@@ -134,25 +138,29 @@ export default function JudgesPage() {
   const selectedPageant = pageants.find(p => p.id === selectedPageantId);
 
   const assignMutation = useAssignJudge(orgId, selectedPageantId);
-  const revokeMutation = useRevokeJudge(orgId, selectedPageantId);
-
   // ── Modal state ───────────────────────────────────────────────────────────
   const [search,       setSearch]       = useState("");
   const [showAdd,      setShowAdd]      = useState(false);
+  const [confirmReuse, setConfirmReuse] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<JudgeRow | null>(null);
+  const [removeAction, setRemoveAction] = useState<"activate" | "deactivate" | "delete">("deactivate");
 
   // ── Add form ──────────────────────────────────────────────────────────────
   const addForm = useForm<AddFormValues>({ resolver: zodResolver(addSchema) });
 
-  function openAdd() { addForm.reset(); setShowAdd(true); }
-  function closeAdd() { setShowAdd(false); addForm.reset(); }
+  function openAdd() { addForm.reset(); setConfirmReuse(false); setShowAdd(true); }
+  function closeAdd() { setShowAdd(false); setConfirmReuse(false); addForm.reset(); }
 
-  async function onAdd(data: AddFormValues) {
+  async function onAdd(data: AddFormValues, confirmed = false) {
     try {
-      await assignMutation.mutateAsync({ email: data.email, firstName: data.firstName, lastName: data.lastName });
+      await assignMutation.mutateAsync({ email: data.email, firstName: data.firstName, lastName: data.lastName, confirmCrossOrganizationReuse: confirmed });
       toast.success(`${data.firstName} ${data.lastName} assigned as judge.`);
       closeAdd();
     } catch (err) {
+      if (err instanceof ApiError && err.code === "STAFF_ACCOUNT_CROSS_ORGANIZATION") {
+        setConfirmReuse(true);
+        return;
+      }
       toast.error(err instanceof ApiError ? err.userMessage : "Failed to assign judge.");
     }
   }
@@ -160,12 +168,17 @@ export default function JudgesPage() {
   // ── Remove ────────────────────────────────────────────────────────────────
   // For remove we use the row's own pageantId
   const removeRevokeMutation = useRevokeJudge(orgId, removeTarget?.pageantId ?? "");
+  const activateMutation = useSetPageantJudgeActive(orgId, removeTarget?.pageantId ?? "", true);
+  const deactivateMutation = useSetPageantJudgeActive(orgId, removeTarget?.pageantId ?? "", false);
+  const deleteMutation = useDeletePageantJudgeAssignment(orgId, removeTarget?.pageantId ?? "");
 
   async function onConfirmRemove() {
     if (!removeTarget) return;
     try {
-      await removeRevokeMutation.mutateAsync(removeTarget.userId);
-      toast.success(`${removeTarget.firstName} ${removeTarget.lastName} removed.`);
+      if (removeAction === "delete") await deleteMutation.mutateAsync(removeTarget.userId);
+      else if (removeAction === "activate") await activateMutation.mutateAsync(removeTarget.userId);
+      else await deactivateMutation.mutateAsync(removeTarget.userId);
+      toast.success(removeAction === "delete" ? "Judge assignment deleted." : `Judge ${removeAction}d.`);
       setRemoveTarget(null);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.userMessage : "Failed to remove judge.");
@@ -176,6 +189,10 @@ export default function JudgesPage() {
   const activeCount   = allJudges.filter(j => j.isActive).length;
   const inactiveCount = allJudges.length - activeCount;
   const allLoaded     = !pageantsLoading && judgesMap.size === pageants.length;
+  const judgeCapacityUsed = planUsage?.pageants.reduce((sum, pageant) => sum + pageant.judgesUsed, 0) ?? 0;
+  const judgeCapacityMax = planUsage?.maxJudgesPerPageant == null
+    ? null
+    : planUsage.maxJudgesPerPageant * (planUsage.pageants.length || pageants.length);
 
   // ── Filter ────────────────────────────────────────────────────────────────
   const [filterPageant, setFilterPageant] = useState("all");
@@ -226,7 +243,7 @@ export default function JudgesPage() {
       header: "Status",
       render: (row) => (
         <OrgBadge variant={row.isActive ? "success" : "muted"}>
-          {row.isActive ? "Active" : "Inactive"}
+          {row.isActive ? "Active" : "Deactivated"}
         </OrgBadge>
       ),
       cellClass: "w-28",
@@ -236,9 +253,9 @@ export default function JudgesPage() {
       header: "",
       render: (row) => (
         <div className="flex items-center justify-end">
-          <Button variant="danger" size="sm" onClick={() => setRemoveTarget(row)}>
-            Remove
-          </Button>
+          {row.isActive ? <Button variant="danger" size="sm" onClick={() => { setRemoveAction("deactivate"); setRemoveTarget(row); }}>Deactivate</Button>
+            : <Button variant="secondary" size="sm" onClick={() => { setRemoveAction("activate"); setRemoveTarget(row); }}>Activate</Button>}
+          <Button variant="danger" size="sm" onClick={() => { setRemoveAction("delete"); setRemoveTarget(row); }}>Delete</Button>
         </div>
       ),
       cellClass: "w-28",
@@ -285,10 +302,11 @@ export default function JudgesPage() {
       ))}
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard label="Total"    value={allLoaded ? allJudges.length : "—"} sub="across all pageants" />
         <StatCard label="Active"   value={allLoaded ? activeCount : "—"}      sub={allLoaded ? `of ${allJudges.length} total` : ""} />
         <StatCard label="Inactive" value={allLoaded ? inactiveCount : "—"}    sub="removed or inactive" />
+        <StatCard label="Plan limit" value={usageLoading ? "—" : planUsage?.planName == null ? "No active plan" : planUsage.maxJudgesPerPageant == null ? "Unlimited" : `${judgeCapacityUsed} / ${judgeCapacityMax}`} sub={planUsage?.planName == null ? "Choose a plan to view limits" : planUsage.maxJudgesPerPageant == null ? "judges per pageant" : `${Math.max(0, (judgeCapacityMax ?? 0) - judgeCapacityUsed)} available across ${planUsage.pageants.length} pageants`} />
       </div>
 
       {/* Loading state */}
@@ -364,8 +382,8 @@ export default function JudgesPage() {
           </>
         }
       >
-        <form id="add-judge-form" onSubmit={addForm.handleSubmit(onAdd)} noValidate className="space-y-5">
-          <div className="grid grid-cols-2 gap-4">
+        <form id="add-judge-form" onSubmit={addForm.handleSubmit((data) => onAdd(data))} noValidate className="space-y-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label={<>First Name <span className="text-error">*</span></>} error={addForm.formState.errors.firstName?.message}>
               <input type="text" placeholder="Roberto" autoComplete="given-name" className={fieldInput} {...addForm.register("firstName")} />
             </Field>
@@ -376,10 +394,11 @@ export default function JudgesPage() {
           <Field
             label={<>Email Address <span className="text-error">*</span></>}
             error={addForm.formState.errors.email?.message}
-            hint="An existing account will be linked, or a new account created with credentials emailed automatically."
+            hint="Each email can have one staff role: judge or tabulator. Existing accounts are linked; new accounts receive credentials by email."
           >
             <input type="email" placeholder="judge@example.com" autoComplete="email" className={fieldInput} {...addForm.register("email")} />
           </Field>
+          {confirmReuse ? <div className="space-y-3 border border-amber-300/50 bg-amber-50 p-4 text-small text-amber-950" role="alert"><p>This account is already a judge for another organization. Use its existing login and password here? No new account or password email will be created.</p><div className="flex gap-2"><Button variant="secondary" size="sm" onClick={() => void onAdd(addForm.getValues(), true)} loading={assignMutation.isPending}>Use existing account</Button><Button variant="ghost" size="sm" onClick={() => setConfirmReuse(false)} disabled={assignMutation.isPending}>Cancel</Button></div></div> : null}
           <div className="flex gap-3 bg-white/5 border border-white/15 px-4 py-3">
             <svg className="w-4 h-4 text-gold/70 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
@@ -396,14 +415,14 @@ export default function JudgesPage() {
         open={!!removeTarget}
         onClose={() => setRemoveTarget(null)}
         onConfirm={onConfirmRemove}
-        title="Remove Judge"
+        title={removeAction === "delete" ? "Delete judge assignment permanently?" : `${removeAction === "activate" ? "Activate" : "Deactivate"} judge?`}
         description={
           removeTarget
-            ? `Remove ${removeTarget.firstName} ${removeTarget.lastName} from "${removeTarget.pageantName}"? They will no longer be able to submit scores.`
+            ? removeAction === "delete" ? `Permanently delete ${removeTarget.firstName} ${removeTarget.lastName}'s assignment in "${removeTarget.pageantName}"? Their account and other assignments remain.` : `${removeAction === "activate" ? "Restore" : "Remove"} ${removeTarget.firstName} ${removeTarget.lastName}'s access in "${removeTarget.pageantName}"?`
             : ""
         }
-        confirmLabel="Remove"
-        loading={removeRevokeMutation.isPending}
+        confirmLabel={removeAction === "delete" ? "Delete assignment" : removeAction === "activate" ? "Activate" : "Deactivate"}
+        loading={removeRevokeMutation.isPending || deactivateMutation.isPending || deleteMutation.isPending}
         destructive
       />
 

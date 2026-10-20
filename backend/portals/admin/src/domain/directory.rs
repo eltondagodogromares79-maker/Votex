@@ -31,6 +31,8 @@ pub struct AdminOrganizationSubscription {
     pub plan_name: String,
     pub plan_code: String,
     pub status: String,
+    pub payment_status: Option<String>,
+    pub proof_status: Option<String>,
 }
 
 #[derive(Debug, Clone)]

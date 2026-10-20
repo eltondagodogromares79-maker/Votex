@@ -5,23 +5,30 @@ import Link from "next/link";
 import OrgPageShell from "@/src/features/org_owner/components/OrgPageShell";
 import { Modal, ConfirmModal } from "@/src/components/ui/Modal";
 import { Button } from "@/src/components/ui/Button";
+import { ApiError } from "@/src/lib/api/client";
 import { useSession } from "@/src/features/auth/context/SessionContext";
 import { usePageant } from "@/src/features/org_owner/hooks/usePageants";
+import { useSubscriptionUsage } from "@/src/features/org_owner/hooks/useSubscription";
 import { useCoordinators } from "@/src/features/org_owner/hooks/useCoordinators";
 import {
   usePageantCoordinators,
   useAssignPageantCoordinator,
   useRevokePageantCoordinator,
+  useSetPageantCoordinatorActive,
+  useDeletePageantCoordinatorAssignment,
   usePageantJudges,
   useAssignJudge,
   useRevokeJudge,
+  useSetPageantJudgeActive,
+  useDeletePageantJudgeAssignment,
   usePageantTabulators,
   useAssignTabulator,
   useRevokeTabulator,
+  useSetPageantTabulatorActive,
+  useDeletePageantTabulatorAssignment,
 } from "@/src/features/org_owner/hooks/usePageantStaff";
 import type {
   PageantStaffResponse,
-  AssignPageantStaffRequest,
   CoordinatorResponse,
 } from "@/src/types";
 
@@ -71,7 +78,7 @@ function EmailAssignForm({
           autoComplete="off"
         />
         <p className="text-caption text-white/35 mt-1.5">
-          An account will be created and credentials sent if this email isn't registered yet.
+          An account will be created and credentials sent if this email isn&apos;t registered yet.
         </p>
       </div>
 
@@ -241,10 +248,10 @@ function CoordinatorAssignModal({
 
 function StaffRow({
   member,
-  onRevoke,
+  onAction,
 }: {
   member: PageantStaffResponse;
-  onRevoke: (m: PageantStaffResponse) => void;
+  onAction: (m: PageantStaffResponse, action: "activate" | "deactivate" | "delete") => void;
 }) {
   const initials =
     `${member.firstName?.[0] ?? ""}${member.lastName?.[0] ?? ""}`.toUpperCase() ||
@@ -269,17 +276,14 @@ function StaffRow({
           ? "bg-success/8 border-success/25 text-success"
           : "bg-border/30 border-border text-muted"
       }`}>
-        {member.isActive ? "Active" : "Inactive"}
+        {member.isActive ? "Active" : "Deactivated"}
       </span>
-      <button
-        onClick={() => onRevoke(member)}
-        className="h-8 w-8 flex items-center justify-center text-muted hover:text-error hover:bg-error/8 transition-colors shrink-0"
-        aria-label="Remove staff member"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24" aria-hidden="true">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M22 10.5h-6m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
-        </svg>
-      </button>
+      <div className="flex items-center gap-1 shrink-0">
+        <button onClick={() => onAction(member, member.isActive ? "deactivate" : "activate")} className={`px-2 py-1 text-[11px] font-semibold ${member.isActive ? "text-error hover:bg-error/8" : "text-navy hover:bg-navy/8"}`}>
+          {member.isActive ? "Deactivate" : "Activate"}
+        </button>
+        <button onClick={() => onAction(member, "delete")} className="px-2 py-1 text-[11px] font-semibold text-error hover:bg-error/8">Delete</button>
+      </div>
     </div>
   );
 }
@@ -292,14 +296,18 @@ function StaffSection({
   members,
   isLoading,
   onAssign,
-  onRevoke,
+  onAction,
+  canAssign = true,
+  limitMessage,
 }: {
   title: string;
   description: string;
   members: PageantStaffResponse[];
   isLoading: boolean;
   onAssign: () => void;
-  onRevoke: (m: PageantStaffResponse) => void;
+  onAction: (m: PageantStaffResponse, action: "activate" | "deactivate" | "delete") => void;
+  canAssign?: boolean;
+  limitMessage?: string;
 }) {
   return (
     <section className="bg-surface border border-border overflow-hidden">
@@ -310,7 +318,9 @@ function StaffSection({
         </div>
         <button
           onClick={onAssign}
-          className="inline-flex items-center gap-1.5 h-8 px-3 bg-gold/15 border border-gold/30 text-gold text-caption font-medium hover:bg-gold/25 transition-colors shrink-0"
+          disabled={!canAssign}
+          title={!canAssign ? limitMessage : undefined}
+          className="inline-flex items-center gap-1.5 h-8 px-3 bg-gold/15 border border-gold/30 text-gold text-caption font-medium hover:bg-gold/25 transition-colors shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -318,6 +328,7 @@ function StaffSection({
           Assign
         </button>
       </div>
+      {!canAssign && limitMessage ? <p className="px-5 py-2 text-caption text-amber-700 bg-amber-50 border-b border-amber-100">{limitMessage}</p> : null}
 
       {isLoading && (
         <div className="px-5 py-4 space-y-2">
@@ -339,7 +350,7 @@ function StaffSection({
       {!isLoading && members.length > 0 && (
         <div>
           {members.map(m => (
-            <StaffRow key={m.userId} member={m} onRevoke={onRevoke} />
+            <StaffRow key={m.userId} member={m} onAction={onAction} />
           ))}
         </div>
       )}
@@ -361,29 +372,51 @@ export default function PageantStaffPage({
   const orgId = currentUser?.organizationId ?? "";
 
   const { data: pageant }                                    = usePageant(orgId, pageantId);
+  const { data: usage } = useSubscriptionUsage(orgId);
   const { data: orgCoordinators = [] }                       = useCoordinators(orgId);
   const { data: coordinators = [], isLoading: coordLoading } = usePageantCoordinators(orgId, pageantId);
   const { data: judges = [],       isLoading: judgeLoading } = usePageantJudges(orgId, pageantId);
   const { data: tabulators = [],   isLoading: tabLoading }   = usePageantTabulators(orgId, pageantId);
+  const pageantUsage = usage?.pageants.find((item) => item.pageantId === pageantId);
+  const hasActivePlan = !!usage?.planName;
+  const canAssignJudge = hasActivePlan && !!pageantUsage && (usage?.maxJudgesPerPageant == null || pageantUsage.judgesUsed < usage.maxJudgesPerPageant);
+  const canAssignTabulator = hasActivePlan && !!usage && (usage.maxTabulatorUsers == null || usage.tabulatorUsersUsed < usage.maxTabulatorUsers);
+  const judgeLimitMessage = !hasActivePlan
+    ? "An active subscription is required to assign judges."
+    : `${pageantUsage?.judgesUsed ?? 0} / ${usage?.maxJudgesPerPageant ?? "∞"} judge slots used for this pageant.`;
+  const tabulatorLimitMessage = !hasActivePlan
+    ? "An active subscription is required to assign tabulators."
+    : `${usage?.tabulatorUsersUsed ?? 0} / ${usage?.maxTabulatorUsers ?? "∞"} organization tabulator slots used.`;
 
   const assignCoord = useAssignPageantCoordinator(orgId, pageantId);
   const revokeCoord = useRevokePageantCoordinator(orgId, pageantId);
+  const activateCoord = useSetPageantCoordinatorActive(orgId, pageantId, true);
+  const deactivateCoord = useSetPageantCoordinatorActive(orgId, pageantId, false);
+  const deleteCoord = useDeletePageantCoordinatorAssignment(orgId, pageantId);
   const assignJudge = useAssignJudge(orgId, pageantId);
   const revokeJudge = useRevokeJudge(orgId, pageantId);
+  const activateJudge = useSetPageantJudgeActive(orgId, pageantId, true);
+  const deactivateJudge = useSetPageantJudgeActive(orgId, pageantId, false);
+  const deleteJudge = useDeletePageantJudgeAssignment(orgId, pageantId);
   const assignTab   = useAssignTabulator(orgId, pageantId);
   const revokeTab   = useRevokeTabulator(orgId, pageantId);
+  const activateTab = useSetPageantTabulatorActive(orgId, pageantId, true);
+  const deactivateTab = useSetPageantTabulatorActive(orgId, pageantId, false);
+  const deleteTab = useDeletePageantTabulatorAssignment(orgId, pageantId);
 
   // modal open state
   const [coordModalOpen,  setCoordModalOpen]  = useState(false);
   const [judgeModalOpen,  setJudgeModalOpen]  = useState(false);
   const [tabModalOpen,    setTabModalOpen]    = useState(false);
-  const [revokeTarget, setRevokeTarget] = useState<{ role: StaffRole; member: PageantStaffResponse } | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<{ role: StaffRole; member: PageantStaffResponse; action: "activate" | "deactivate" | "delete" } | null>(null);
 
   // judge / tab email forms
   const [judgeForm,  setJudgeForm]  = useState<EmailForm>(EMPTY_EMAIL);
   const [tabForm,    setTabForm]    = useState<EmailForm>(EMPTY_EMAIL);
   const [judgeErr,   setJudgeErr]   = useState<string | null>(null);
   const [tabErr,     setTabErr]     = useState<string | null>(null);
+  const [judgeConfirmReuse, setJudgeConfirmReuse] = useState(false);
+  const [tabConfirmReuse, setTabConfirmReuse] = useState(false);
 
   // ── Coordinator assign ────────────────────────────────────────────────────
 
@@ -394,7 +427,8 @@ export default function PageantStaffPage({
 
   // ── Judge assign ──────────────────────────────────────────────────────────
 
-  async function handleAssignJudge() {
+  async function handleAssignJudge(confirmed = false) {
+    if (!canAssignJudge) { setJudgeErr(judgeLimitMessage); return; }
     if (!judgeForm.email.trim()) { setJudgeErr("Email is required."); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(judgeForm.email.trim())) { setJudgeErr("Enter a valid email address."); return; }
     setJudgeErr(null);
@@ -403,17 +437,24 @@ export default function PageantStaffPage({
         email:     judgeForm.email.trim(),
         firstName: judgeForm.firstName.trim() || null,
         lastName:  judgeForm.lastName.trim() || null,
+        confirmCrossOrganizationReuse: confirmed,
       });
       setJudgeModalOpen(false);
       setJudgeForm(EMPTY_EMAIL);
-    } catch {
-      setJudgeErr("Failed to assign judge. They may already be assigned.");
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "STAFF_ACCOUNT_CROSS_ORGANIZATION") {
+        setJudgeConfirmReuse(true);
+        setJudgeErr(error.userMessage);
+        return;
+      }
+      setJudgeErr(error instanceof ApiError ? error.userMessage : "Failed to assign judge. They may already be assigned.");
     }
   }
 
   // ── Tabulator assign ──────────────────────────────────────────────────────
 
-  async function handleAssignTab() {
+  async function handleAssignTab(confirmed = false) {
+    if (!canAssignTabulator) { setTabErr(tabulatorLimitMessage); return; }
     if (!tabForm.email.trim()) { setTabErr("Email is required."); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(tabForm.email.trim())) { setTabErr("Enter a valid email address."); return; }
     setTabErr(null);
@@ -422,11 +463,17 @@ export default function PageantStaffPage({
         email:     tabForm.email.trim(),
         firstName: tabForm.firstName.trim() || null,
         lastName:  tabForm.lastName.trim() || null,
+        confirmCrossOrganizationReuse: confirmed,
       });
       setTabModalOpen(false);
       setTabForm(EMPTY_EMAIL);
-    } catch {
-      setTabErr("Failed to assign tabulator. They may already be assigned.");
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "STAFF_ACCOUNT_CROSS_ORGANIZATION") {
+        setTabConfirmReuse(true);
+        setTabErr(error.userMessage);
+        return;
+      }
+      setTabErr(error instanceof ApiError ? error.userMessage : "Failed to assign tabulator. They may already be assigned.");
     }
   }
 
@@ -434,10 +481,10 @@ export default function PageantStaffPage({
 
   async function handleRevoke() {
     if (!revokeTarget) return;
-    const { role, member } = revokeTarget;
-    if (role === "coordinator")  await revokeCoord.mutateAsync(member.userId);
-    else if (role === "judge")   await revokeJudge.mutateAsync(member.userId);
-    else if (role === "tabulator") await revokeTab.mutateAsync(member.userId);
+    const { role, member, action } = revokeTarget;
+    if (role === "coordinator") await (action === "activate" ? activateCoord : action === "deactivate" ? deactivateCoord : deleteCoord).mutateAsync(member.userId);
+    else if (role === "judge") await (action === "activate" ? activateJudge : action === "deactivate" ? deactivateJudge : deleteJudge).mutateAsync(member.userId);
+    else if (role === "tabulator") await (action === "activate" ? activateTab : action === "deactivate" ? deactivateTab : deleteTab).mutateAsync(member.userId);
     setRevokeTarget(null);
   }
 
@@ -478,7 +525,7 @@ export default function PageantStaffPage({
           members={coordinators}
           isLoading={coordLoading}
           onAssign={() => setCoordModalOpen(true)}
-          onRevoke={m => setRevokeTarget({ role: "coordinator", member: m })}
+          onAction={(m, action) => setRevokeTarget({ role: "coordinator", member: m, action })}
         />
 
         <StaffSection
@@ -487,7 +534,9 @@ export default function PageantStaffPage({
           members={judges}
           isLoading={judgeLoading}
           onAssign={() => { setJudgeForm(EMPTY_EMAIL); setJudgeErr(null); setJudgeModalOpen(true); }}
-          onRevoke={m => setRevokeTarget({ role: "judge", member: m })}
+          canAssign={canAssignJudge}
+          limitMessage={judgeLimitMessage}
+          onAction={(m, action) => setRevokeTarget({ role: "judge", member: m, action })}
         />
 
         <StaffSection
@@ -496,7 +545,9 @@ export default function PageantStaffPage({
           members={tabulators}
           isLoading={tabLoading}
           onAssign={() => { setTabForm(EMPTY_EMAIL); setTabErr(null); setTabModalOpen(true); }}
-          onRevoke={m => setRevokeTarget({ role: "tabulator", member: m })}
+          canAssign={canAssignTabulator}
+          limitMessage={tabulatorLimitMessage}
+          onAction={(m, action) => setRevokeTarget({ role: "tabulator", member: m, action })}
         />
 
       </div>
@@ -514,47 +565,51 @@ export default function PageantStaffPage({
       {/* ── Judge modal ───────────────────────────────────────────────────── */}
       <Modal
         open={judgeModalOpen}
-        onClose={() => { setJudgeModalOpen(false); setJudgeErr(null); }}
+        onClose={() => { setJudgeModalOpen(false); setJudgeErr(null); setJudgeConfirmReuse(false); }}
         title="Assign Judge"
         description="Enter the judge's email. An account will be created if they aren't registered yet."
         size="md"
         footer={
           <>
             <Button variant="ghost" size="sm"
-              onClick={() => { setJudgeModalOpen(false); setJudgeErr(null); }}
+              onClick={() => { setJudgeModalOpen(false); setJudgeErr(null); setJudgeConfirmReuse(false); }}
               disabled={assignJudge.isPending}>
               Cancel
             </Button>
-            <Button variant="secondary" size="sm" onClick={handleAssignJudge} loading={assignJudge.isPending}>
+            <Button variant="secondary" size="sm" onClick={() => void handleAssignJudge()} loading={assignJudge.isPending} disabled={!canAssignJudge}>
               Assign Judge
             </Button>
           </>
         }
       >
+        {!canAssignJudge ? <p className="mb-4 border border-amber-300 bg-amber-50 px-3 py-2 text-small text-amber-900">{judgeLimitMessage}</p> : null}
         <EmailAssignForm form={judgeForm} onChange={setJudgeForm} error={judgeErr} />
+        {judgeConfirmReuse ? <div className="mt-4 space-y-3 border border-amber-300/50 bg-amber-50 p-4 text-small text-amber-950" role="alert"><p>Continuing links this existing judge account to this organization. Their current login and password stay the same; no new credentials will be sent.</p><div className="flex gap-2"><Button variant="secondary" size="sm" onClick={() => void handleAssignJudge(true)} loading={assignJudge.isPending}>Use existing account</Button><Button variant="ghost" size="sm" onClick={() => { setJudgeConfirmReuse(false); setJudgeErr(null); }} disabled={assignJudge.isPending}>Cancel</Button></div></div> : null}
       </Modal>
 
       {/* ── Tabulator modal ───────────────────────────────────────────────── */}
       <Modal
         open={tabModalOpen}
-        onClose={() => { setTabModalOpen(false); setTabErr(null); }}
+        onClose={() => { setTabModalOpen(false); setTabErr(null); setTabConfirmReuse(false); }}
         title="Assign Tabulator"
         description="Enter the tabulator's email. An account will be created if they aren't registered yet."
         size="md"
         footer={
           <>
             <Button variant="ghost" size="sm"
-              onClick={() => { setTabModalOpen(false); setTabErr(null); }}
+              onClick={() => { setTabModalOpen(false); setTabErr(null); setTabConfirmReuse(false); }}
               disabled={assignTab.isPending}>
               Cancel
             </Button>
-            <Button variant="secondary" size="sm" onClick={handleAssignTab} loading={assignTab.isPending}>
+            <Button variant="secondary" size="sm" onClick={() => void handleAssignTab()} loading={assignTab.isPending} disabled={!canAssignTabulator}>
               Assign Tabulator
             </Button>
           </>
         }
       >
+        {!canAssignTabulator ? <p className="mb-4 border border-amber-300 bg-amber-50 px-3 py-2 text-small text-amber-900">{tabulatorLimitMessage}</p> : null}
         <EmailAssignForm form={tabForm} onChange={setTabForm} error={tabErr} />
+        {tabConfirmReuse ? <div className="mt-4 space-y-3 border border-amber-300/50 bg-amber-50 p-4 text-small text-amber-950" role="alert"><p>Continuing links this existing tabulator account to this organization. Their current login and password stay the same; no new credentials will be sent.</p><div className="flex gap-2"><Button variant="secondary" size="sm" onClick={() => void handleAssignTab(true)} loading={assignTab.isPending}>Use existing account</Button><Button variant="ghost" size="sm" onClick={() => { setTabConfirmReuse(false); setTabErr(null); }} disabled={assignTab.isPending}>Cancel</Button></div></div> : null}
       </Modal>
 
       {/* ── Revoke confirm ────────────────────────────────────────────────── */}
@@ -562,18 +617,20 @@ export default function PageantStaffPage({
         open={revokeTarget !== null}
         onClose={() => setRevokeTarget(null)}
         onConfirm={handleRevoke}
-        title={`Remove ${revokeTarget ? ROLE_LABELS[revokeTarget.role] : "Staff"}`}
+        title={`${revokeTarget?.action === "delete" ? "Delete" : revokeTarget?.action === "activate" ? "Activate" : "Deactivate"} ${revokeTarget ? ROLE_LABELS[revokeTarget.role] : "Staff"}`}
         description={
           revokeTarget
-            ? `Remove ${revokeTarget.member.firstName
+            ? revokeTarget.action === "delete" ? `Permanently delete this ${ROLE_LABELS[revokeTarget.role].toLowerCase()} assignment for ${revokeTarget.member.firstName
+                ? `${revokeTarget.member.firstName} ${revokeTarget.member.lastName}` : revokeTarget.member.email}? Their account and other pageant assignments will remain.`
+              : `${revokeTarget.action === "activate" ? "Restore access for" : "Remove access for"} ${revokeTarget.member.firstName
                 ? `${revokeTarget.member.firstName} ${revokeTarget.member.lastName}`
                 : revokeTarget.member.email
-              } from this pageant? They will lose access immediately.`
+              } ${revokeTarget.action === "activate" ? "to" : "from"} this pageant?`
             : ""
         }
-        confirmLabel="Remove"
-        loading={revokeCoord.isPending || revokeJudge.isPending || revokeTab.isPending}
-        destructive
+        confirmLabel={revokeTarget?.action === "delete" ? "Delete assignment" : revokeTarget?.action === "activate" ? "Activate" : "Deactivate"}
+        loading={revokeCoord.isPending || revokeJudge.isPending || revokeTab.isPending || activateCoord.isPending || activateJudge.isPending || activateTab.isPending || deleteCoord.isPending || deleteJudge.isPending || deleteTab.isPending}
+        destructive={revokeTarget?.action !== "activate"}
       />
 
     </OrgPageShell>

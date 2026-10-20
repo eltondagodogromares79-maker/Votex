@@ -17,14 +17,20 @@
 export interface CategoryResponse {
   id: string;
   pageantId: string;
+  roundId?: string | null;
   code: string;
   name: string;
   description: string | null;
   displayOrder: number;
+  eligibilityScope: CategoryEligibilityScope;
+  eligibilityNotes: string | null;
   isActive: boolean;
+  status: "DRAFT" | "OPEN" | "CLOSED" | "COMPLETED";
   createdAt: string;
   updatedAt: string;
 }
+
+export type CategoryEligibilityScope = "OPEN" | "WOMEN" | "MEN" | "LGBTQ_PLUS" | "CUSTOM";
 
 export type Category = CategoryResponse;
 
@@ -37,6 +43,9 @@ export interface CreateCategoryRequest {
   name: string;
   description?: string | null;
   displayOrder?: number;
+  eligibilityScope?: CategoryEligibilityScope;
+  eligibilityNotes?: string | null;
+  roundId?: string | null;
 }
 
 export type UpdateCategoryRequest = CreateCategoryRequest;
@@ -74,3 +83,23 @@ export interface CreateCriterionRequest {
 }
 
 export type UpdateCriterionRequest = CreateCriterionRequest;
+
+export interface RoundCriterionConfig {
+  criterionId: string;
+  categoryId: string;
+  weightPercentage: string;
+  maximumScore: string;
+  minimumScore: string;
+  displayOrder: number;
+}
+
+export interface RoundCategoryConfig {
+  categoryId: string;
+  weightPercentage: string;
+}
+
+export interface RoundJudgingConfiguration {
+  categoryIds: string[];
+  categories: RoundCategoryConfig[];
+  criteria: RoundCriterionConfig[];
+}

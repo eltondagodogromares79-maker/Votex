@@ -44,6 +44,9 @@ pub enum AppError {
     #[error("conflict: {0}")]
     Conflict(String),
 
+    #[error("staff account is assigned to another organization")]
+    StaffAccountCrossOrganization { role: String },
+
     #[error("email already exists")]
     EmailTaken,
 
@@ -83,6 +86,7 @@ impl AppError {
             AppError::Validation(_) => "VALIDATION_ERROR",
             AppError::NotFound(_) => "NOT_FOUND",
             AppError::Conflict(_) => "CONFLICT",
+            AppError::StaffAccountCrossOrganization { .. } => "STAFF_ACCOUNT_CROSS_ORGANIZATION",
             AppError::EmailTaken => "EMAIL_TAKEN",
             AppError::SlugTaken => "SLUG_TAKEN",
 
@@ -126,6 +130,10 @@ impl AppError {
             }
 
             AppError::Conflict(message) => message.clone(),
+
+            AppError::StaffAccountCrossOrganization { role } => format!(
+                "This account is already assigned as a {role} by another organization. Do you want to use this existing account here?"
+            ),
 
             AppError::EmailTaken => "An account with this email already exists.".into(),
 
@@ -247,9 +255,10 @@ impl ResponseError for AppError {
 
             AppError::NotFound(_) => StatusCode::NOT_FOUND,
 
-            AppError::Conflict(_) | AppError::EmailTaken | AppError::SlugTaken => {
-                StatusCode::CONFLICT
-            }
+            AppError::Conflict(_)
+            | AppError::StaffAccountCrossOrganization { .. }
+            | AppError::EmailTaken
+            | AppError::SlugTaken => StatusCode::CONFLICT,
 
             AppError::Database(_)
             | AppError::ExternalService(_)

@@ -15,6 +15,14 @@ pub struct Contestant {
     pub photo_url: Option<String>,
     pub biography: Option<String>,
     pub is_active: bool,
+    pub current_round_status: Option<String>,
+    pub current_round_name: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ContestantPlacements {
+    pub category_ids: Vec<Uuid>,
+    pub round_ids: Vec<Uuid>,
 }

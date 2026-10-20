@@ -1,13 +1,11 @@
 use std::{net::IpAddr, sync::Arc};
 
-use core_infra::AppError;
+use core_infra::{AppError, db::with_verified_database_user_context};
 
 use crate::{
     application::ports::{
-        authentication_workflow::AuthenticationWorkflow,
-        session_workflow::SessionWorkflow,
-        token_issuer::TokenIssuer,
-        user_role_workflow::UserRoleWorkflow,
+        authentication_workflow::AuthenticationWorkflow, session_workflow::SessionWorkflow,
+        token_issuer::TokenIssuer, user_role_workflow::UserRoleWorkflow,
     },
     contracts::login::{LoginRequest, LoginResult},
 };
@@ -46,16 +44,18 @@ impl AuthenticationApplication {
             .authenticate(&request.email, &request.password)
             .await?;
 
-        // 2. Create a new session — produces the refresh token + session record
+        // 2. Resolve the user's primary role after validating credentials.
+        //    RLS needs this trusted user context to read tenant memberships.
+        let role = with_verified_database_user_context(
+            user.id,
+            self.user_role_workflow.resolve_primary_role(user.id),
+        )
+        .await?;
+
+        // 3. Create a session only after role resolution succeeds.
         let session_result = self
             .session_workflow
             .create_session(user.id, user_agent.map(str::to_owned), ip_address)
-            .await?;
-
-        // 3. Resolve the user's primary role from the database
-        let role = self
-            .user_role_workflow
-            .resolve_primary_role(user.id)
             .await?;
 
         // 4. Issue a signed access token embedding the role claim

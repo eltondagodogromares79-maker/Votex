@@ -36,3 +36,11 @@ export function useDeactivateVotePackage(orgId: string, pageantId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: key(orgId, pageantId) }),
   });
 }
+
+export function useActivateVotePackage(orgId: string, pageantId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (packageId: string) => orgOwnerApi.activateVotePackage(orgId, pageantId, packageId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: key(orgId, pageantId) }),
+  });
+}

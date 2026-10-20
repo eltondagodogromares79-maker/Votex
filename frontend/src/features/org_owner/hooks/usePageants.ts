@@ -24,7 +24,10 @@ export function useCreatePageant(orgId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: CreatePageantRequest) => orgOwnerApi.createPageant(orgId, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: key(orgId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: key(orgId) });
+      qc.invalidateQueries({ queryKey: ["org_owner", orgId, "subscription-usage"] });
+    },
   });
 }
 
@@ -32,7 +35,21 @@ export function useUpdatePageant(orgId: string, pageantId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: UpdatePageantRequest) => orgOwnerApi.updatePageant(orgId, pageantId, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: key(orgId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: key(orgId) });
+      qc.invalidateQueries({ queryKey: ["org_owner", orgId, "subscription-usage"] });
+    },
+  });
+}
+
+export function usePublishPageant(orgId: string, pageantId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => orgOwnerApi.publishPageant(orgId, pageantId),
+    onSuccess: (pageant) => {
+      qc.setQueryData(["org_owner", orgId, "pageants", pageantId], pageant);
+      qc.invalidateQueries({ queryKey: key(orgId) });
+    },
   });
 }
 
@@ -40,6 +57,20 @@ export function useArchivePageant(orgId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (pageantId: string) => orgOwnerApi.archivePageant(orgId, pageantId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: key(orgId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: key(orgId) });
+      qc.invalidateQueries({ queryKey: ["org_owner", orgId, "subscription-usage"] });
+    },
+  });
+}
+
+export function useRestorePageant(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (pageantId: string) => orgOwnerApi.restorePageant(orgId, pageantId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: key(orgId) });
+      qc.invalidateQueries({ queryKey: ["org_owner", orgId, "subscription-usage"] });
+    },
   });
 }

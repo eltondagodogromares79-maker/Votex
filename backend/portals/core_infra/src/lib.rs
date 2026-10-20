@@ -11,5 +11,6 @@ pub mod telemetry;
 pub mod validation;
 
 pub use errors::{AppError, ErrorResponse, RepositoryError};
+pub use infrastructure::realtime::{PageantRealtimeEvent, RealtimeHub};
 pub use middleware::RequestIdMiddleware;
 pub use validation::validate;

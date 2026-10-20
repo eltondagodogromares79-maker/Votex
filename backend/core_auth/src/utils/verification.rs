@@ -17,3 +17,30 @@ pub fn hash_verification_code(code: &str, secret: &[u8]) -> String {
 
     hex::encode(mac.finalize().into_bytes())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{generate_verification_code, hash_verification_code};
+
+    #[test]
+    fn verification_code_is_six_digits() {
+        for _ in 0..100 {
+            let code = generate_verification_code();
+            assert_eq!(code.len(), 6);
+            assert!(code.bytes().all(|byte| byte.is_ascii_digit()));
+        }
+    }
+
+    #[test]
+    fn verification_hash_is_secret_bound() {
+        let code = "012345";
+        assert_eq!(
+            hash_verification_code(code, b"one"),
+            hash_verification_code(code, b"one")
+        );
+        assert_ne!(
+            hash_verification_code(code, b"one"),
+            hash_verification_code(code, b"two")
+        );
+    }
+}

@@ -41,11 +41,11 @@ pub trait RegistrationWorkflow: Send + Sync {
     ///
     /// Records created by the implementation:
     ///
-    ///     users
-    ///         │
-    ///         └── audience_voters
-    ///         │
-    ///         └── user_email_verification_tokens
+    /// ```text
+    /// users
+    ///   ├── audience_voters
+    ///   └── user_email_verification_tokens
+    /// ```
     ///
     /// All records must be created inside one database transaction.
     ///
@@ -65,25 +65,18 @@ pub trait RegistrationWorkflow: Send + Sync {
     ///
     /// Records created by the implementation:
     ///
-    ///     users
-    ///         │
-    ///         └── organizations
-    ///                 │
-    ///                 └── organization_members
-    ///                         │
-    ///                         └── organization_member_roles
-    ///                                 │
-    ///                                 └── ORG_OWNER
-    ///
-    ///     users
-    ///         │
-    ///         └── user_email_verification_tokens
+    /// ```text
+    /// users ── organizations ── organization_members ── organization_member_roles ── ORG_OWNER
+    ///   └── user_email_verification_tokens
+    /// ```
     ///
     /// The ORG_OWNER role is NOT supplied by the caller.
     ///
     /// This is intentional:
     ///
-    ///     register_organization_owner()
+    /// ```text
+    /// register_organization_owner()
+    /// ```
     ///
     /// already defines the business operation being performed. Therefore,
     /// the workflow knows that the newly created organization member must
@@ -97,11 +90,10 @@ pub trait RegistrationWorkflow: Send + Sync {
     ///
     /// If any step fails:
     ///
-    ///     User
-    ///     Organization
-    ///     OrganizationMember
-    ///     OrganizationMemberRole
-    ///     EmailVerificationToken
+    /// ```text
+    /// User, Organization, OrganizationMember, OrganizationMemberRole,
+    /// and EmailVerificationToken
+    /// ```
     ///
     /// must all be rolled back together.
     async fn register_organization_owner(

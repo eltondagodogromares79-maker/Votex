@@ -39,6 +39,19 @@ export interface BackendAssignedPageantResponse {
   isPublic: boolean;
 }
 
+export interface CoordinatorResourceLimits {
+  hasActiveSubscription: boolean;
+  maxJudgesPerPageant: number | null;
+  maxTabulatorUsers: number | null;
+  maxRoundsPerPageant: number | null;
+  maxCategoriesPerRound: number | null;
+  judgesUsed: number;
+  tabulatorsUsed: number;
+  roundsUsed: number;
+  categoriesUsed: number;
+  roundCategories: { roundId: string; roundName: string; categoriesUsed: number }[];
+}
+
 /**
  * coordinator/contracts/judges.rs PageantJudgeResponse.
  * Also used as PageantTabulatorResponse shape.

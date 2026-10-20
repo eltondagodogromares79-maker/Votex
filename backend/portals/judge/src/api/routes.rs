@@ -1,4 +1,7 @@
-use crate::api::handler::judges::{categories, contestants, criteria, pageants, rounds};
+use crate::api::handler::judges::{
+    categories, category_scoring, contestants, criteria, finalize_category_scores, pageants,
+    rounds, submit_category_scores,
+};
 use actix_web::web;
 use core_infra::{
     api::middleware::{AuthorizationGuard, JwtAuthentication},
@@ -35,6 +38,18 @@ pub fn configure(cfg: &mut web::ServiceConfig, token: Arc<dyn TokenAuthenticator
                 web::get()
                     .to(criteria)
                     .wrap(AuthorizationGuard::pageant("pageant.read", "pageant_id")),
+            )
+            .route(
+                "/pageants/{pageant_id}/rounds/{round_id}/categories/{category_id}/scoring",
+                web::get().to(category_scoring).wrap(AuthorizationGuard::pageant("score.submit", "pageant_id")),
+            )
+            .route(
+                "/pageants/{pageant_id}/rounds/{round_id}/categories/{category_id}/contestants/{contestant_id}/scores",
+                web::put().to(submit_category_scores).wrap(AuthorizationGuard::pageant("score.submit", "pageant_id")),
+            )
+            .route(
+                "/pageants/{pageant_id}/rounds/{round_id}/categories/{category_id}/submit",
+                web::post().to(finalize_category_scores).wrap(AuthorizationGuard::pageant("score.submit", "pageant_id")),
             ),
     );
 }

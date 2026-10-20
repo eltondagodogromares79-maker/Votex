@@ -51,7 +51,10 @@ export default function EditCandidateModal({
         middleName: candidate.middleName ?? "",
         lastName: candidate.lastName,
         displayName: candidate.displayName ?? "",
-        gender: candidate.gender ?? "",
+        gender:
+          candidate.gender === "Male" || candidate.gender === "Female"
+            ? candidate.gender
+            : undefined,
         photoUrl: candidate.photoUrl ?? "",
         biography: candidate.biography ?? "",
       });
@@ -64,6 +67,8 @@ export default function EditCandidateModal({
   }
 
   async function onSubmit(data: CandidateFormValues) {
+    const gender = data.gender?.trim() || null;
+
     try {
       await updateContestant.mutateAsync({
         contestantNumber: data.contestantNumber,
@@ -71,7 +76,7 @@ export default function EditCandidateModal({
         middleName: data.middleName?.trim() || null,
         lastName: data.lastName.trim(),
         displayName: data.displayName?.trim() || null,
-        gender: data.gender?.trim() || null,
+        gender,
         photoUrl: data.photoUrl?.trim() || null,
         biography: data.biography?.trim() || null,
       });
@@ -120,7 +125,7 @@ export default function EditCandidateModal({
           />
         </Field>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="space-y-4">
           <Field label={<>First Name <span className="text-error">*</span></>} error={errors.firstName?.message}>
             <input type="text" placeholder="First name" disabled={updateContestant.isPending}
               {...register("firstName")} className={fieldInput} />
@@ -145,16 +150,11 @@ export default function EditCandidateModal({
               {...register("displayName")} className={fieldInput} />
           </Field>
 
-          <Field label="Gender" error={errors.gender?.message}>
-            <select
-              disabled={updateContestant.isPending}
-              {...register("gender")}
-              className={fieldInput}
-            >
+          <Field label={<>Gender <span className="text-error">*</span></>} error={errors.gender?.message} hint="Category eligibility is set separately when you create a category.">
+            <select disabled={updateContestant.isPending} {...register("gender")} className={fieldInput}>
               <option value="">Select gender</option>
-              <option value="Female">Female</option>
               <option value="Male">Male</option>
-              <option value="Other">Other</option>
+              <option value="Female">Female</option>
             </select>
           </Field>
         </div>

@@ -17,6 +17,14 @@ export function useAssignedPageant(pageantId: string) {
   });
 }
 
+export function usePageantResourceLimits(pageantId: string) {
+  return useQuery({
+    queryKey: ["coordinator", "pageants", pageantId, "resource-limits"],
+    queryFn: () => coordinatorApi.getResourceLimits(pageantId),
+    enabled: !!pageantId,
+  });
+}
+
 export function useUpdateAssignedPageant(pageantId: string) {
   const qc = useQueryClient();
   return useMutation({

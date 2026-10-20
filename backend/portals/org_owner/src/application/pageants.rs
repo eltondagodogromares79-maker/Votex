@@ -5,8 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     application::ports::{
-        pageant_workflow::PageantWorkflow,
-        subscription_workflow::SubscriptionWorkflow,
+        pageant_workflow::PageantWorkflow, subscription_workflow::SubscriptionWorkflow,
     },
     contracts::pageants::{CreatePageantRequest, UpdatePageantRequest},
     domain::pageant::Pageant,
@@ -22,7 +21,10 @@ impl PageantApplication {
         workflow: Arc<dyn PageantWorkflow>,
         subscription: Arc<dyn SubscriptionWorkflow>,
     ) -> Self {
-        Self { workflow, subscription }
+        Self {
+            workflow,
+            subscription,
+        }
     }
 
     pub async fn create(
@@ -43,10 +45,13 @@ impl PageantApplication {
             .subscription
             .current_plan(organization_id)
             .await?
-            .ok_or_else(|| AppError::BadRequest(
-                "Your organization does not have an active subscription. \
-                 Please subscribe to a plan before creating a pageant.".to_owned(),
-            ))?;
+            .ok_or_else(|| {
+                AppError::BadRequest(
+                    "Your organization does not have an active subscription. \
+                 Please subscribe to a plan before creating a pageant."
+                        .to_owned(),
+                )
+            })?;
 
         // Check max_pageants limit
         if let Some(max) = plan.max_pageants {
@@ -122,9 +127,34 @@ impl PageantApplication {
         self.workflow.update_pageant(pageant).await
     }
 
+    pub async fn publish(
+        &self,
+        organization_id: Uuid,
+        pageant_id: Uuid,
+    ) -> Result<Pageant, AppError> {
+        let pageant = self
+            .workflow
+            .get_pageant(organization_id, pageant_id)
+            .await?;
+        if pageant.status != "DRAFT" {
+            return Err(AppError::Conflict(
+                "only draft pageants can be published".to_owned(),
+            ));
+        }
+        self.workflow
+            .publish_pageant(organization_id, pageant_id)
+            .await
+    }
+
     pub async fn archive(&self, organization_id: Uuid, pageant_id: Uuid) -> Result<(), AppError> {
         self.workflow
             .archive_pageant(organization_id, pageant_id)
+            .await
+    }
+
+    pub async fn restore(&self, organization_id: Uuid, pageant_id: Uuid) -> Result<(), AppError> {
+        self.workflow
+            .restore_pageant(organization_id, pageant_id)
             .await
     }
 }

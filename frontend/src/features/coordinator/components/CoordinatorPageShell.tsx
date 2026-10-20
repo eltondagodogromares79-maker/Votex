@@ -23,6 +23,10 @@ interface CoordinatorPageShellProps {
   action?: React.ReactNode;
   /** Optional breadcrumb items */
   breadcrumbs?: BreadcrumbItem[];
+  /** Render the heading as a navy feature hero. */
+  hero?: boolean;
+  /** Show the pageant workspace header instead of the account header. */
+  pageantTitle?: string;
   children: React.ReactNode;
 }
 
@@ -31,20 +35,32 @@ export default function CoordinatorPageShell({
   subtitle,
   action,
   breadcrumbs,
+  hero = false,
+  pageantTitle,
   children,
 }: CoordinatorPageShellProps) {
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex min-h-screen min-w-0 flex-col">
       {/* Sticky top bar */}
-      <CoordinatorHeader title={title} />
+      <CoordinatorHeader pageantTitle={pageantTitle} />
+
+      {hero ? <section className="relative isolate overflow-hidden border-b border-gold/25 bg-navy py-12 text-white sm:py-14">
+        <div className="container-page relative">
+          <div className="pointer-events-none absolute -right-10 -top-36 -z-10 h-[360px] w-[360px] rounded-full border border-gold/10" />
+          <p className="mb-3 text-caption font-semibold uppercase tracking-[0.18em] text-gold">Coordinator workspace</p>
+          <h1 className="break-words font-serif text-[1.625rem] font-bold leading-tight sm:text-[1.875rem] lg:text-[2.25rem]">{title}</h1>
+          {subtitle ? <p className="mt-3 max-w-2xl text-small leading-relaxed text-white/60">{subtitle}</p> : null}
+          {breadcrumbs && breadcrumbs.length > 0 ? <nav aria-label="Breadcrumb" className="mt-5"><ol className="flex flex-wrap items-center gap-2 text-caption text-white/45">{breadcrumbs.map((crumb, index) => <li key={`${crumb.label}-${index}`} className="flex items-center gap-2">{index > 0 ? <span aria-hidden="true">/</span> : null}{crumb.href ? <a href={crumb.href} className="transition-colors hover:text-gold">{crumb.label}</a> : <span className="text-white/75">{crumb.label}</span>}</li>)}</ol></nav> : null}
+        </div>
+      </section> : null}
 
       {/* Page body */}
-      <div className="flex-1 px-6 py-6 max-w-full w-full mx-auto">
+      <div className={hero ? "container-page min-w-0 flex-1 py-5 sm:py-6" : "min-w-0 w-full flex-1 px-4 py-5 sm:px-6 sm:py-6"}>
 
         {/* Breadcrumbs */}
-        {breadcrumbs && breadcrumbs.length > 0 && (
+        {!hero && breadcrumbs && breadcrumbs.length > 0 && (
           <nav aria-label="Breadcrumb" className="mb-4">
-            <ol className="flex items-center gap-1.5 text-caption text-muted">
+            <ol className="flex flex-wrap items-center gap-1.5 text-caption text-muted">
               {breadcrumbs.map((crumb, i) => (
                 <li key={i} className="flex items-center gap-1.5">
                   {i > 0 && (
@@ -64,9 +80,9 @@ export default function CoordinatorPageShell({
         )}
 
         {/* Page heading row */}
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <div>
-            <h2 className="font-serif font-bold text-charcoal text-h1 leading-tight">
+        {!hero && <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0">
+            <h2 className="break-words font-serif font-bold text-charcoal text-h1 leading-tight">
               {title}
             </h2>
             {subtitle && (
@@ -75,8 +91,8 @@ export default function CoordinatorPageShell({
               </p>
             )}
           </div>
-          {action && <div className="shrink-0">{action}</div>}
-        </div>
+          {action && <div className="w-full shrink-0 sm:w-auto">{action}</div>}
+        </div>}
 
         {/* Content */}
         {children}

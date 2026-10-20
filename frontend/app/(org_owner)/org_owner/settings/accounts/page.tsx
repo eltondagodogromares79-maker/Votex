@@ -1,9 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import OrgPageShell from "@/src/features/org_owner/components/OrgPageShell";
 import OrgBadge from "@/src/features/org_owner/components/OrgBadge";
 import { Button } from "@/src/components/ui/Button";
+import { useSession } from "@/src/features/auth/context/SessionContext";
+import { authApi } from "@/src/features/auth/api/authentication";
+import { ApiError } from "@/src/lib/api/client";
+import { useToast } from "@/src/components/ui/Toast";
+import {
+  useOrganizationProfile,
+  useUpdateOrganizationProfile,
+} from "@/src/features/org_owner/hooks/useOrganizationProfile";
+import type { MeResponse } from "@/src/features/auth/api/authentication";
+import type { OrganizationProfile } from "@/src/types";
+import { CloudinaryImageUpload } from "@/src/components/ui/CloudinaryImageUpload";
+import DeleteAccountPanel from "@/src/features/auth/components/DeleteAccountPanel";
 
 const fieldLabel = "block text-small font-medium text-charcoal mb-1.5";
 const fieldInput  = "w-full h-10 px-3 bg-surface border border-border text-small text-charcoal placeholder:text-muted focus:outline-none focus:border-navy transition-colors";
@@ -22,7 +35,157 @@ function Section({ title, description, children }: { title: string; description?
 }
 
 export default function AccountsSettingsPage() {
-  const [avatar, setAvatar] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [verifyingCode, setVerifyingCode] = useState(false);
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [emailDraft, setEmailDraft] = useState("");
+  const { currentUser, setCurrentUser } = useSession();
+  const { toast } = useToast();
+  const orgId = currentUser?.organizationId ?? "";
+  const profileQuery = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: authApi.me,
+    enabled: !!currentUser,
+  });
+  const organizationQuery = useOrganizationProfile(orgId);
+  const updateProfile = useMutation({
+    mutationFn: authApi.updateMe,
+    onSuccess: (profile) => {
+      profileQuery.refetch();
+      setCurrentUser({
+        ...currentUser!,
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        email: profile.email,
+        pendingEmail: profile.pendingEmail,
+        emailVerifiedAt: profile.emailVerifiedAt,
+        profileImageUrl: profile.profileImageUrl,
+      });
+    },
+  });
+  const updateOrganization = useUpdateOrganizationProfile(orgId);
+  const [personal, setPersonal] = useState<MeResponse | null>(null);
+  const [organization, setOrganization] = useState<OrganizationProfile | null>(null);
+
+  useEffect(() => {
+    if (profileQuery.data) {
+      setPersonal(profileQuery.data);
+      setEmailDraft(profileQuery.data.pendingEmail ?? profileQuery.data.email);
+    }
+  }, [profileQuery.data]);
+
+  useEffect(() => {
+    if (organizationQuery.data) setOrganization(organizationQuery.data);
+  }, [organizationQuery.data]);
+
+  async function savePersonalInfo() {
+    if (!personal) return;
+    try {
+      const saved = await updateProfile.mutateAsync({
+        firstName: personal.firstName,
+        middleName: personal.middleName,
+        lastName: personal.lastName,
+        phone: personal.phone,
+        profileImageUrl: personal.profileImageUrl,
+      });
+      setPersonal(saved);
+      toast.success("Personal information updated.");
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.userMessage : "Could not update personal information.");
+    }
+  }
+
+  async function saveOrganizationInfo() {
+    if (!organization) return;
+    try {
+      const saved = await updateOrganization.mutateAsync({
+        name: organization.name,
+        slug: organization.slug,
+        description: organization.description,
+        email: organization.email,
+        phone: organization.phone,
+        address: organization.address,
+        logoUrl: organization.logoUrl,
+      });
+      setOrganization(saved);
+      toast.success("Organization profile updated.");
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.userMessage : "Could not update the organization profile.");
+    }
+  }
+
+  function updatePersonal<K extends keyof MeResponse>(key: K, value: MeResponse[K]) {
+    setPersonal((valueBefore) => valueBefore ? { ...valueBefore, [key]: value } : valueBefore);
+  }
+
+  function updateOrganizationField<K extends keyof OrganizationProfile>(key: K, value: OrganizationProfile[K]) {
+    setOrganization((valueBefore) => valueBefore ? { ...valueBefore, [key]: value } : valueBefore);
+  }
+
+
+  async function sendVerificationCode() {
+    setSendingCode(true);
+    try {
+      await authApi.sendVerificationCode();
+      setCodeSent(true);
+      toast.success(`Verification code sent to ${personal?.pendingEmail ?? currentUser?.email}.`);
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.userMessage : "Could not send the verification code.");
+    } finally {
+      setSendingCode(false);
+    }
+  }
+
+  async function verifyEmail() {
+    const targetEmail = personal?.pendingEmail ?? currentUser?.email;
+    if (!targetEmail) return;
+    setVerifyingCode(true);
+    try {
+      await authApi.verifyEmail({ email: targetEmail, code: code.trim() });
+      const refreshedProfile = await authApi.me();
+      setPersonal(refreshedProfile);
+      setEmailDraft(refreshedProfile.email);
+      if (currentUser) {
+        setCurrentUser({
+          ...currentUser,
+          email: refreshedProfile.email,
+          pendingEmail: refreshedProfile.pendingEmail,
+          emailVerifiedAt: refreshedProfile.emailVerifiedAt,
+        });
+      }
+      setCodeSent(false);
+      setCode("");
+      toast.success("Your email has been verified.");
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.userMessage : "Could not verify the code.");
+    } finally {
+      setVerifyingCode(false);
+    }
+  }
+
+  async function requestEmailChange() {
+    setSavingEmail(true);
+    try {
+      const updated = await authApi.requestEmailChange(emailDraft.trim());
+      setPersonal(updated);
+      if (currentUser) setCurrentUser({ ...currentUser, pendingEmail: updated.pendingEmail });
+      if (updated.pendingEmail || !updated.emailVerifiedAt) {
+        await authApi.sendVerificationCode();
+        setCodeSent(true);
+        setCode("");
+        toast.success(`Verification code sent to ${updated.pendingEmail ?? updated.email}.`);
+      } else {
+        setCodeSent(false);
+        toast.info("That is already your verified email address.");
+      }
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.userMessage : "Could not request the email change.");
+    } finally {
+      setSavingEmail(false);
+    }
+  }
 
   return (
     <OrgPageShell
@@ -36,102 +199,168 @@ export default function AccountsSettingsPage() {
     >
       <div className="max-w-full space-y-6">
 
-        {/* Profile avatar */}
-        <Section title="Profile Photo" description="This appears alongside your name in the platform.">
-          <div className="flex items-center gap-6">
-            <div className="w-16 h-16 bg-navy flex items-center justify-center shrink-0">
-              {avatar ? (
-                <img src={avatar} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                <span className="font-serif font-bold text-gold text-[1.5rem]">J</span>
-              )}
-            </div>
-            <div className="flex gap-3">
-              <Button variant="ghost" size="sm">Upload Photo</Button>
-              {avatar && <Button variant="danger" size="sm" onClick={() => setAvatar(null)}>Remove</Button>}
-            </div>
-          </div>
-        </Section>
+        <div id="email-verification">
+          <Section
+            title="Email Verification"
+            description={`Verify ${personal?.pendingEmail ?? currentUser?.email ?? "your email address"} to secure your account and subscribe to plans.`}
+          >
+            {currentUser?.emailVerifiedAt && !currentUser.pendingEmail ? (
+              <OrgBadge variant="success">Email verified</OrgBadge>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-small text-charcoal">
+                  {codeSent
+                    ? "Enter the 6-digit code sent to your email address. The code expires after a short time."
+                    : "We’ll email you a 6-digit code to confirm that you own this address."}
+                </p>
+                {codeSent && (
+                  <div className="max-w-sm">
+                    <label htmlFor="verification-code" className={fieldLabel}>Verification code</label>
+                    <input
+                      id="verification-code"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      pattern="[0-9]{6}"
+                      value={code}
+                      onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="Enter 6-digit code"
+                      className={fieldInput}
+                    />
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-3">
+                  {!codeSent ? (
+                    <Button variant="secondary" size="sm" loading={sendingCode} onClick={() => void sendVerificationCode()}>
+                      Send verification code
+                    </Button>
+                  ) : (
+                    <>
+                      <Button variant="secondary" size="sm" loading={verifyingCode} disabled={code.length !== 6} onClick={() => void verifyEmail()}>
+                        Verify email
+                      </Button>
+                      <Button variant="ghost" size="sm" loading={sendingCode} onClick={() => void sendVerificationCode()}>
+                        Resend code
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </Section>
+        </div>
 
         {/* Personal info */}
         <Section title="Personal Information" description="Update your name and contact details.">
-          <div className="space-y-4">
+          {profileQuery.isError ? (
+            <p className="text-small text-error">Could not load your account details. Refresh and try again.</p>
+          ) : profileQuery.isLoading || !personal ? (
+            <p className="text-small text-muted">Loading your account details…</p>
+          ) : <div className="space-y-4">
+            <div>
+              <label className={fieldLabel}>Profile photo</label>
+              <CloudinaryImageUpload folder="profile-images" rounded value={personal.profileImageUrl} label="Upload profile photo" onChange={(url) => updatePersonal("profileImageUrl", url || null)} />
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={fieldLabel}>First Name <span className="text-error">*</span></label>
-                <input type="text" defaultValue="Juan" className={fieldInput} />
+                <input type="text" value={personal.firstName} onChange={(event) => updatePersonal("firstName", event.target.value)} className={fieldInput} />
               </div>
               <div>
                 <label className={fieldLabel}>Last Name <span className="text-error">*</span></label>
-                <input type="text" defaultValue="dela Cruz" className={fieldInput} />
+                <input type="text" value={personal.lastName} onChange={(event) => updatePersonal("lastName", event.target.value)} className={fieldInput} />
               </div>
             </div>
             <div>
-              <label className={fieldLabel}>Display Name</label>
-              <input type="text" defaultValue="Juan dela Cruz" className={fieldInput} />
-              <p className={fieldHint}>How your name appears to team members and across the platform.</p>
+              <label className={fieldLabel}>Middle Name</label>
+              <input type="text" value={personal.middleName ?? ""} onChange={(event) => updatePersonal("middleName", event.target.value || null)} className={fieldInput} />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={fieldLabel}>Email Address <span className="text-error">*</span></label>
-                <div className="relative">
-                  <input type="email" defaultValue="juan@example.com" className={fieldInput} />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <OrgBadge variant="success">Verified</OrgBadge>
-                  </div>
-                </div>
+                <input
+                  type="email"
+                  value={personal.emailVerifiedAt ? personal.email : emailDraft}
+                  disabled={!!personal.emailVerifiedAt}
+                  onChange={(event) => setEmailDraft(event.target.value)}
+                  className={`${fieldInput} ${personal.emailVerifiedAt ? "opacity-70" : ""}`}
+                />
+                <p className={fieldHint}>
+                  {personal.emailVerifiedAt
+                    ? "Verified email addresses cannot be changed."
+                    : personal.pendingEmail
+                      ? `Waiting for verification of ${personal.pendingEmail}.`
+                      : "You can edit this address until it is verified."}
+                </p>
               </div>
               <div>
                 <label className={fieldLabel}>Phone Number</label>
-                <input type="tel" defaultValue="+63 917 123 4567" className={fieldInput} />
+                <input type="tel" value={personal.phone ?? ""} onChange={(event) => updatePersonal("phone", event.target.value || null)} className={fieldInput} />
               </div>
             </div>
             <div className="pt-1 flex gap-3">
-              <Button variant="secondary" size="sm">Save Changes</Button>
-              <Button variant="ghost" size="sm">Discard</Button>
+              <Button variant="secondary" size="sm" loading={updateProfile.isPending} onClick={() => void savePersonalInfo()}>Save Changes</Button>
+              <Button variant="ghost" size="sm" onClick={() => profileQuery.data && setPersonal(profileQuery.data)}>Discard</Button>
             </div>
-          </div>
+            {!personal.emailVerifiedAt && (
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={savingEmail}
+                disabled={!emailDraft.trim() || emailDraft.trim() === personal.email}
+                onClick={() => void requestEmailChange()}
+              >
+                {personal.pendingEmail ? "Send code to new email" : "Update email"}
+              </Button>
+            )}
+          </div>}
         </Section>
 
         {/* Organization profile */}
         <Section title="Organization Profile" description="Public-facing details for your pageant organization.">
-          <div className="space-y-4">
+          {organizationQuery.isError ? (
+            <p className="text-small text-error">Could not load organization details. Refresh and try again.</p>
+          ) : organizationQuery.isLoading || !organization ? (
+            <p className="text-small text-muted">Loading organization details…</p>
+          ) : <div className="space-y-4">
+            <div>
+              <label className={fieldLabel}>Organization logo</label>
+              <CloudinaryImageUpload folder="organization-logos" value={organization.logoUrl} label="Upload organization logo" onChange={(url) => updateOrganizationField("logoUrl", url || null)} />
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={fieldLabel}>Organization Name <span className="text-error">*</span></label>
-                <input type="text" defaultValue="Votex Demo Organization" className={fieldInput} />
+                <input type="text" value={organization.name} onChange={(event) => updateOrganizationField("name", event.target.value)} className={fieldInput} />
               </div>
               <div>
                 <label className={fieldLabel}>URL Slug <span className="text-error">*</span></label>
-                <input type="text" defaultValue="votex-demo-org" className={fieldInput} />
-                <p className={fieldHint}>votex.app/org/votex-demo-org</p>
+                <input type="text" value={organization.slug} onChange={(event) => updateOrganizationField("slug", event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} className={fieldInput} />
+                <p className={fieldHint}>Public URL slug for the organization.</p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={fieldLabel}>Country</label>
-                <select className={fieldInput + " bg-surface"}>
-                  <option>Philippines</option>
-                  <option>Singapore</option>
-                  <option>United States</option>
-                </select>
+                <label className={fieldLabel}>Organization Email</label>
+                <input type="email" value={organization.email ?? ""} onChange={(event) => updateOrganizationField("email", event.target.value || null)} className={fieldInput} />
               </div>
               <div>
-                <label className={fieldLabel}>Timezone</label>
-                <select className={fieldInput + " bg-surface"}>
-                  <option>Asia/Manila (GMT+8)</option>
-                  <option>Asia/Singapore (GMT+8)</option>
-                  <option>UTC</option>
-                </select>
+                <label className={fieldLabel}>Organization Phone</label>
+                <input type="tel" value={organization.phone ?? ""} onChange={(event) => updateOrganizationField("phone", event.target.value || null)} className={fieldInput} />
               </div>
             </div>
             <div>
               <label className={fieldLabel}>Description</label>
-              <textarea rows={3} placeholder="Brief description of your pageant organization…"
+              <textarea rows={3} value={organization.description ?? ""} onChange={(event) => updateOrganizationField("description", event.target.value || null)}
                 className="w-full px-3 py-2.5 bg-surface border border-border text-small text-charcoal placeholder:text-muted focus:outline-none focus:border-navy transition-colors resize-none" />
             </div>
-            <Button variant="secondary" size="sm">Update Organization</Button>
-          </div>
+            <div>
+              <label className={fieldLabel}>Address</label>
+              <textarea rows={2} value={organization.address ?? ""} onChange={(event) => updateOrganizationField("address", event.target.value || null)}
+                className="w-full px-3 py-2.5 bg-surface border border-border text-small text-charcoal placeholder:text-muted focus:outline-none focus:border-navy transition-colors resize-none" />
+            </div>
+            <Button variant="secondary" size="sm" loading={updateOrganization.isPending} onClick={() => void saveOrganizationInfo()}>Update Organization</Button>
+          </div>}
         </Section>
 
         {/* Password */}
@@ -155,30 +384,7 @@ export default function AccountsSettingsPage() {
           </div>
         </Section>
 
-        {/* Danger zone */}
-        <div className="border border-error/30 bg-surface overflow-hidden">
-          <div className="px-6 py-4 border-b border-error/30 bg-error/5">
-            <h3 className="font-serif font-semibold text-error text-h3">Danger Zone</h3>
-            <p className="text-small text-muted mt-0.5">These actions are permanent and cannot be undone.</p>
-          </div>
-          <div className="px-6 py-5 space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-small font-semibold text-charcoal">Deactivate Account</p>
-                <p className="text-caption text-muted mt-0.5">Temporarily disable your account. You can reactivate at any time.</p>
-              </div>
-              <Button variant="ghost" size="sm">Deactivate</Button>
-            </div>
-            <div className="h-px bg-error/15" />
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-small font-semibold text-error">Delete Account</p>
-                <p className="text-caption text-muted mt-0.5">Permanently delete your account and all associated data.</p>
-              </div>
-              <Button variant="danger" size="sm">Delete Account</Button>
-            </div>
-          </div>
-        </div>
+        <DeleteAccountPanel />
 
       </div>
     </OrgPageShell>

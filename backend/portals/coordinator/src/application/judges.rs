@@ -55,6 +55,7 @@ impl CoordinatorJudgeApplication {
                 request.last_name.trim(),
                 &password_hash,
                 role,
+                request.confirm_cross_organization_reuse,
             )
             .await?;
         let role_name = match role {
@@ -63,11 +64,14 @@ impl CoordinatorJudgeApplication {
         };
         if account_created {
             self.email_sender
-                .send_staff_credentials_email(
+                .send_pageant_staff_credentials_email(
                     &staff.email,
                     &staff.first_name,
                     role_name,
                     &temporary_password,
+                    &staff.pageant_name,
+                    staff.pageant_id,
+                    &staff.pageant_slug,
                 )
                 .await?;
         }
@@ -83,6 +87,30 @@ impl CoordinatorJudgeApplication {
     ) -> Result<(), AppError> {
         self.workflow
             .revoke(coordinator_id, pageant_id, user_id, role)
+            .await
+    }
+
+    pub async fn activate(
+        &self,
+        coordinator_id: Uuid,
+        pageant_id: Uuid,
+        user_id: Uuid,
+        role: PageantStaffRole,
+    ) -> Result<(), AppError> {
+        self.workflow
+            .activate(coordinator_id, pageant_id, user_id, role)
+            .await
+    }
+
+    pub async fn delete_assignment(
+        &self,
+        coordinator_id: Uuid,
+        pageant_id: Uuid,
+        user_id: Uuid,
+        role: PageantStaffRole,
+    ) -> Result<(), AppError> {
+        self.workflow
+            .delete_assignment(coordinator_id, pageant_id, user_id, role)
             .await
     }
 }

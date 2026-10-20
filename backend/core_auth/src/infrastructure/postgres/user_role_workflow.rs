@@ -50,6 +50,7 @@ impl UserRoleWorkflow for PostgresUserRoleWorkflow {
             INNER JOIN roles r ON r.id = omr.role_id
             WHERE om.user_id = $1
               AND om.is_active = TRUE
+              AND omr.is_active = TRUE
               AND r.scope = 'ORGANIZATION'::role_scope
               AND r.is_active = TRUE
               AND r.code IN ('ORG_OWNER', 'ORG_COORDINATOR')
@@ -69,13 +70,36 @@ impl UserRoleWorkflow for PostgresUserRoleWorkflow {
 
         if let Some(code) = org_role {
             return Ok(match code.as_str() {
-                "ORG_OWNER"       => "org_owner".to_string(),
+                "ORG_OWNER" => "org_owner".to_string(),
                 "ORG_COORDINATOR" => "coordinator".to_string(),
-                _                 => "coordinator".to_string(),
+                _ => "coordinator".to_string(),
             });
         }
 
         // ── 4 & 5. Pageant roles (PAGEANT scope) ─────────────────────────────
+        let has_conflicting_staff_roles: bool = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(DISTINCT r.code) = 2
+            FROM pageant_member_roles pmr
+            INNER JOIN roles r ON r.id = pmr.role_id
+            WHERE pmr.user_id = $1
+              AND pmr.is_active = TRUE
+              AND r.scope = 'PAGEANT'::role_scope
+              AND r.is_active = TRUE
+              AND r.code IN ('PAGEANT_JUDGE', 'PAGEANT_TABULATOR')
+            "#,
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| AppError::Database(Box::new(e)))?;
+
+        if has_conflicting_staff_roles {
+            return Err(AppError::BadRequest(
+                "This account has active Judge and Tabulator assignments. Ask the Organization Owner to remove one staff role before signing in.".to_owned(),
+            ));
+        }
+
         let pageant_role: Option<String> = sqlx::query_scalar(
             r#"
             SELECT r.code
@@ -102,9 +126,9 @@ impl UserRoleWorkflow for PostgresUserRoleWorkflow {
 
         if let Some(code) = pageant_role {
             return Ok(match code.as_str() {
-                "PAGEANT_JUDGE"     => "judge".to_string(),
+                "PAGEANT_JUDGE" => "judge".to_string(),
                 "PAGEANT_TABULATOR" => "tabulator".to_string(),
-                _                   => "audience".to_string(),
+                _ => "audience".to_string(),
             });
         }
 
@@ -123,6 +147,41 @@ impl UserRoleWorkflow for PostgresUserRoleWorkflow {
 
         if is_audience {
             return Ok("audience".to_string());
+        }
+
+        // Keep the user's account sign-in available after their final staff
+        // assignment is deactivated. This only resolves the portal identity;
+        // pageant authorization still requires an active assignment.
+        let inactive_pageant_role: Option<String> = sqlx::query_scalar(
+            r#"
+            SELECT r.code
+            FROM pageant_member_roles pmr
+            INNER JOIN roles r ON r.id = pmr.role_id
+            WHERE pmr.user_id = $1
+              AND pmr.is_active = FALSE
+              AND r.scope = 'PAGEANT'::role_scope
+              AND r.is_active = TRUE
+              AND r.code IN ('PAGEANT_JUDGE', 'PAGEANT_TABULATOR')
+            ORDER BY
+                CASE r.code
+                    WHEN 'PAGEANT_JUDGE'      THEN 1
+                    WHEN 'PAGEANT_TABULATOR'  THEN 2
+                    ELSE 99
+                END
+            LIMIT 1
+            "#,
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| AppError::Database(Box::new(e)))?;
+
+        if let Some(code) = inactive_pageant_role {
+            return Ok(match code.as_str() {
+                "PAGEANT_JUDGE" => "judge".to_string(),
+                "PAGEANT_TABULATOR" => "tabulator".to_string(),
+                _ => "audience".to_string(),
+            });
         }
 
         Err(AppError::NotFound("user role".to_string()))

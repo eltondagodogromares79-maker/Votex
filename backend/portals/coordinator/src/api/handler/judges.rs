@@ -84,6 +84,38 @@ pub async fn revoke(
     Ok(HttpResponse::NoContent().finish())
 }
 
+pub async fn activate(
+    request: HttpRequest,
+    application: web::Data<CoordinatorJudgeApplication>,
+    path: web::Path<JudgePath>,
+) -> Result<HttpResponse, AppError> {
+    application
+        .activate(
+            actor_id(&request)?,
+            path.pageant_id,
+            path.user_id,
+            PageantStaffRole::Judge,
+        )
+        .await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+pub async fn delete_assignment(
+    request: HttpRequest,
+    application: web::Data<CoordinatorJudgeApplication>,
+    path: web::Path<JudgePath>,
+) -> Result<HttpResponse, AppError> {
+    application
+        .delete_assignment(
+            actor_id(&request)?,
+            path.pageant_id,
+            path.user_id,
+            PageantStaffRole::Judge,
+        )
+        .await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
 pub async fn list_tabulators(
     request: HttpRequest,
     application: web::Data<CoordinatorJudgeApplication>,
@@ -129,6 +161,38 @@ pub async fn revoke_tabulators(
 ) -> Result<HttpResponse, AppError> {
     application
         .revoke(
+            actor_id(&request)?,
+            path.pageant_id,
+            path.user_id,
+            PageantStaffRole::Tabulator,
+        )
+        .await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+pub async fn activate_tabulator(
+    request: HttpRequest,
+    application: web::Data<CoordinatorJudgeApplication>,
+    path: web::Path<JudgePath>,
+) -> Result<HttpResponse, AppError> {
+    application
+        .activate(
+            actor_id(&request)?,
+            path.pageant_id,
+            path.user_id,
+            PageantStaffRole::Tabulator,
+        )
+        .await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+pub async fn delete_tabulator_assignment(
+    request: HttpRequest,
+    application: web::Data<CoordinatorJudgeApplication>,
+    path: web::Path<JudgePath>,
+) -> Result<HttpResponse, AppError> {
+    application
+        .delete_assignment(
             actor_id(&request)?,
             path.pageant_id,
             path.user_id,

@@ -17,6 +17,8 @@ impl PageantStaffRole {
 #[derive(Debug, Clone)]
 pub struct PageantJudge {
     pub pageant_id: Uuid,
+    pub pageant_name: String,
+    pub pageant_slug: String,
     pub user_id: Uuid,
     pub email: String,
     pub first_name: String,

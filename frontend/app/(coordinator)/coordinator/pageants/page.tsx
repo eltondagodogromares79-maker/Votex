@@ -1,108 +1,115 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import CoordinatorPageShell from "@/src/features/coordinator/components/CoordinatorPageShell";
-import CoordinatorBadge from "@/src/features/coordinator/components/CoordinatorBadge";
-import CoordinatorEmptyState from "@/src/features/coordinator/components/CoordinatorEmptyState";
+import { MdArrowForward, MdCalendarMonth, MdLocationOn, MdSearch, MdStar } from "react-icons/md";
 import { Button } from "@/src/components/ui/Button";
+import { useAssignedPageants } from "@/src/features/coordinator/hooks/usePageants";
+import CoordinatorHeader from "@/src/features/coordinator/components/CoordinatorHeader";
 
-type PageantStatus = "draft"|"configuring"|"ready"|"live"|"paused"|"completed"|"archived";
-
-interface Pageant {
-  id: string; name: string; slug: string; status: PageantStatus;
-  startsAt: string; candidates: number; judges: number; tabulators: number; rounds: number;
+function displayDate(value: string | null) {
+  if (!value) return "Date to be announced";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
 }
 
-const PAGEANTS: Pageant[] = [
-  { id: "1", name: "Miss Universe Philippines 2026",  slug: "miss-universe-ph-2026",  status: "live",        startsAt: "Jun 14, 2026", candidates: 32, judges: 8, tabulators: 3, rounds: 4 },
-  { id: "2", name: "Binibining Pilipinas 2026",        slug: "binibining-2026",         status: "configuring", startsAt: "Jul 22, 2026", candidates: 25, judges: 6, tabulators: 2, rounds: 3 },
-  { id: "3", name: "Campus Royalty 2026",              slug: "campus-royalty-2026",     status: "draft",       startsAt: "Aug 10, 2026", candidates: 18, judges: 4, tabulators: 1, rounds: 2 },
-];
-
-const STATUS_BADGE: Record<PageantStatus, { label: string; variant: "success"|"navy"|"muted"|"gold"|"warning"|"error" }> = {
-  draft:       { label: "Draft",       variant: "muted"    },
-  configuring: { label: "Configuring", variant: "gold"     },
-  ready:       { label: "Ready",       variant: "navy"     },
-  live:        { label: "Live",        variant: "success"  },
-  paused:      { label: "Paused",      variant: "warning"  },
-  completed:   { label: "Completed",   variant: "muted"    },
-  archived:    { label: "Archived",    variant: "muted"    },
-};
-
-const ALL_STATUSES: PageantStatus[] = ["draft","configuring","ready","live","paused","completed","archived"];
-
-function PageantIcon() {
-  return <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth={1.25} viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>;
+function statusLabel(value: string) {
+  return value.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export default function CoordinatorPageantsPage() {
-  const [filter, setFilter] = useState<PageantStatus|"all">("all");
   const [search, setSearch] = useState("");
-
-  const filtered = PAGEANTS.filter((p) => {
-    const matchStatus = filter === "all" || p.status === filter;
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
-    return matchStatus && matchSearch;
-  });
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 9;
+  const { data: pageants = [], isLoading, isError, refetch } = useAssignedPageants();
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return pageants.filter((pageant) => !term || `${pageant.name} ${pageant.organizationName ?? ""} ${pageant.venue ?? ""}`.toLowerCase().includes(term));
+  }, [pageants, search]);
+  const liveCount = pageants.filter((pageant) => pageant.status.toLowerCase() === "live").length;
+  const nextEvent = pageants.find((pageant) => pageant.eventDate && new Date(pageant.eventDate) >= new Date());
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const visiblePageants = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
-    <CoordinatorPageShell
-      title="Pageants"
-      subtitle="Create and manage all your assigned pageant events."
-      breadcrumbs={[{ label: "Dashboard", href: "/coordinator/dashboard" }, { label: "Pageants" }]}
-    >
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-5">
-        <div className="relative flex-1 max-w-xs">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-          </svg>
-          <input type="text" placeholder="Search pageants…" value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-9 pl-9 pr-3 bg-surface border border-border text-small text-charcoal placeholder:text-muted focus:outline-none focus:border-navy transition-colors" />
-        </div>
-        <div className="flex gap-1 overflow-x-auto">
-          {(["all", ...ALL_STATUSES] as const).map((s) => (
-            <button key={s} type="button" onClick={() => setFilter(s)}
-              className={`shrink-0 h-9 px-3 text-caption font-medium transition-colors border
-                ${filter === s ? "bg-navy text-white border-navy" : "bg-surface text-muted border-border hover:border-navy hover:text-navy"}`}>
-              {s === "all" ? "All" : STATUS_BADGE[s]?.label ?? s}
-            </button>
-          ))}
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#f6f6f3]">
+      <CoordinatorHeader />
 
-      {filtered.length === 0 ? (
-        <CoordinatorEmptyState icon={<PageantIcon />} heading="No pageants found"
-          description={search ? `No results for "${search}".` : "No pageants have been assigned to you yet."} />
-      ) : (
-        <div className="border border-border bg-surface overflow-hidden">
-          {filtered.map((p) => (
-            <Link key={p.id} href={`/coordinator/pageants/${p.id}`}
-              className="flex items-center gap-4 px-5 py-4 hover:bg-slate/40 transition-colors group border-b border-border/60 last:border-b-0">
-              <div className={`w-2 h-2 shrink-0 rounded-full ${
-                p.status === "live" ? "bg-success animate-pulse" :
-                p.status === "configuring" ? "bg-gold" : "bg-border"}`} />
-              <div className="flex-1 min-w-0">
-                <p className="text-small font-semibold text-charcoal group-hover:text-navy truncate transition-colors">{p.name}</p>
-                <p className="text-caption text-muted mt-0.5 font-mono">{p.slug}</p>
-                <p className="text-caption text-muted mt-0.5 hidden sm:block">
-                  {p.startsAt} · {p.candidates} candidates · {p.judges} judges · {p.tabulators} tabulators · {p.rounds} rounds
-                </p>
-              </div>
-              <CoordinatorBadge variant={STATUS_BADGE[p.status]?.variant ?? "muted"}>
-                {STATUS_BADGE[p.status]?.label ?? p.status}
-              </CoordinatorBadge>
-              <svg className="w-4 h-4 text-border group-hover:text-muted shrink-0 transition-colors" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-              </svg>
-            </Link>
-          ))}
+      <section className="relative isolate overflow-hidden border-b border-gold/25 bg-navy py-14 text-white sm:py-16">
+        <div className="container-page relative">
+          <div className="pointer-events-none absolute -right-10 -top-36 -z-10 h-[420px] w-[420px] rounded-full border border-gold/10" />
+          <div className="pointer-events-none absolute -right-2 -top-28 -z-10 h-[330px] w-[330px] rounded-full border border-gold/10" />
+          <p className="mb-4 flex items-center gap-2 text-caption font-semibold uppercase tracking-[0.18em] text-gold"><MdStar className="text-sm" /> Coordinator workspace</p>
+          <h1 className="mb-4 max-w-3xl font-serif text-[1.625rem] font-bold leading-tight sm:text-[1.875rem] lg:text-[2.25rem]">Your assigned pageants</h1>
+          <p className="mb-8 max-w-xl text-small leading-relaxed text-white/55">Open an event workspace to manage its contestants, rounds, categories, and staff.</p>
+          <div className="flex flex-wrap gap-x-8 gap-y-4">
+            <div><p className="font-serif text-2xl font-semibold text-gold">{pageants.length}</p><p className="mt-1 text-[11px] uppercase tracking-[0.15em] text-white/45">Assigned</p></div>
+            <div><p className="font-serif text-2xl font-semibold text-gold">{liveCount}</p><p className="mt-1 text-[11px] uppercase tracking-[0.15em] text-white/45">Live now</p></div>
+            <div><p className="font-serif text-lg font-semibold text-white">{nextEvent ? displayDate(nextEvent.eventDate) : "—"}</p><p className="mt-1 text-[11px] uppercase tracking-[0.15em] text-white/45">Next event</p></div>
+          </div>
         </div>
-      )}
-      {filtered.length > 0 && (
-        <p className="text-caption text-muted mt-3">Showing {filtered.length} of {PAGEANTS.length} pageants</p>
-      )}
-    </CoordinatorPageShell>
+      </section>
+
+      <section className="sticky top-[76px] z-10 border-b border-border bg-surface py-5">
+        <div className="container-page">
+          <label className="relative block max-w-md">
+            <MdSearch className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
+            <input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setCurrentPage(1); }} placeholder="Search assigned pageants by name or venue…" aria-label="Search assigned pageants" className="w-full border border-border bg-slate py-2.5 pl-10 pr-4 text-small text-charcoal outline-none transition-colors placeholder:text-muted/60 focus:border-navy" />
+          </label>
+        </div>
+      </section>
+
+      <section className="bg-slate py-10 sm:py-12">
+        <div className="container-page">
+          <p className="mb-6 text-caption text-muted" aria-live="polite">{isLoading ? "Loading assigned pageants…" : search ? `${filtered.length} result${filtered.length !== 1 ? "s" : ""} for “${search}”` : `${filtered.length} assigned pageant${filtered.length !== 1 ? "s" : ""}`}</p>
+
+          {isLoading ? <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="animate-pulse overflow-hidden border border-border bg-white"><div className="h-52 bg-slate/60" /><div className="space-y-3 p-5"><div className="h-4 w-2/3 bg-slate/60" /><div className="h-3 w-1/2 bg-slate/40" /><div className="h-10 bg-slate/40" /></div></div>)}</div> : null}
+
+          {isError ? <div className="mt-6 border border-red-200 bg-white p-8 text-center"><p className="font-semibold text-red-700">We couldn’t load your pageants.</p><p className="mt-1 text-sm text-muted">Check your connection and try again.</p><button onClick={() => void refetch()} className="mt-4 text-sm font-semibold text-navy underline">Try again</button></div> : null}
+
+          {!isLoading && !isError && filtered.length > 0 ? <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {visiblePageants.map((pageant) => (
+              <article key={pageant.id} className={`group flex flex-col overflow-hidden rounded-sm bg-surface transition-transform duration-200 ${pageant.status.toUpperCase() === "DRAFT" ? "opacity-90" : "hover:-translate-y-[3px]"}`}>
+                <div className="relative h-48 overflow-hidden bg-gradient-to-br from-navy via-navy/90 to-gold/40">
+                  {pageant.logoUrl ? <Image src={pageant.logoUrl} alt={`${pageant.name} event artwork`} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover transition-transform duration-500 group-hover:scale-[1.03]" /> : <div className="absolute inset-0 flex items-center justify-center"><span className="font-serif text-8xl font-semibold text-white/10">{pageant.name.slice(0, 1).toUpperCase()}</span><div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-navy/80 to-transparent" /></div>}
+                  <span className="absolute right-3 top-3 bg-navy/70 px-2.5 py-1 text-caption font-semibold text-white">{statusLabel(pageant.status)}</span>
+                  <span className="absolute bottom-3 left-4 text-caption font-semibold uppercase tracking-widest text-gold/90">Assigned event</span>
+                </div>
+                <div className="flex flex-1 flex-col gap-3 px-5 py-5">
+                  <p className="text-caption font-semibold uppercase tracking-[0.14em] text-gold/80">{pageant.organizationName ?? "Assigned organization"}</p>
+                  <h3 className="font-serif text-h3 font-bold leading-snug text-charcoal">{pageant.name}</h3>
+                  <div className="mt-auto space-y-1.5 pt-1 text-small text-muted">
+                    <p className="flex items-center gap-2"><MdCalendarMonth className="text-base text-navy/60" />{displayDate(pageant.eventDate)}</p>
+                    <p className="flex items-center gap-2"><MdLocationOn className="text-base text-navy/60" />{pageant.venue || "Venue to be announced"}</p>
+                  </div>
+                </div>
+                <div className="px-5 pb-5 pt-0">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+                    <span className="text-caption text-muted">{pageant.status.toUpperCase() === "DRAFT" ? "Dashboard access" : "Coordinator access"}</span>
+                    {pageant.status.toUpperCase() === "DRAFT" ? (
+                      <div className="text-right">
+                        <Button variant="secondary" size="sm" disabled title="Available after the pageant is published">Open dashboard <MdArrowForward className="ml-1 inline text-sm" /></Button>
+                        <p className="mt-2 max-w-52 text-xs leading-relaxed text-muted">Available after the organization publishes this pageant.</p>
+                      </div>
+                    ) : (
+                      <Link href={`/coordinator/pageants/${pageant.id}`}><Button variant="secondary" size="sm">Open dashboard <MdArrowForward className="ml-1 inline text-sm" /></Button></Link>
+                    )}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div> : null}
+
+          {!isLoading && !isError && filtered.length === 0 ? <div className="border border-dashed border-border bg-surface px-6 py-16 text-center"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-navy/5 text-navy"><MdCalendarMonth className="text-2xl" /></div><h3 className="mt-4 font-serif text-h2 font-bold text-charcoal">{search ? "No pageants match your search" : "No pageants assigned yet"}</h3><p className="mx-auto mt-2 max-w-md text-small leading-6 text-muted">{search ? "Try a different search term." : "When an organization assigns you to a pageant, it will appear here."}</p></div> : null}
+
+          {!isLoading && !isError && filtered.length > pageSize ? <nav aria-label="Assigned pageant pages" className="mt-10 flex items-center justify-center gap-4">
+            <Button variant="ghost" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}>Previous</Button>
+            <span className="text-small text-muted" aria-live="polite">Page {currentPage} of {pageCount}</span>
+            <Button variant="ghost" size="sm" disabled={currentPage >= pageCount} onClick={() => setCurrentPage((page) => Math.min(pageCount, page + 1))}>Next</Button>
+          </nav> : null}
+        </div>
+      </section>
+    </div>
   );
 }

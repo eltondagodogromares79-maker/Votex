@@ -43,8 +43,14 @@ impl RoundApplication {
         pageant_id: Uuid,
         request: CreateRoundRequest,
     ) -> Result<PageantRound, AppError> {
-        let (name, advancement_count) = validate_fields(
+        if !matches!(request.status, RoundStatus::Draft | RoundStatus::Open) {
+            return Err(AppError::BadRequest(
+                "a new round can only start as draft or open".to_owned(),
+            ));
+        }
+        let (name, round_type, advancement_count) = validate_fields(
             &request.name,
+            &request.round_type,
             request.round_number,
             request.advancement_count,
             request.starts_at,
@@ -59,8 +65,8 @@ impl RoundApplication {
                     pageant_id,
                     name,
                     round_number: request.round_number,
-                    round_type: request.round_type,
-                    status: RoundStatus::Draft,
+                    round_type,
+                    status: request.status,
                     advancement_count,
                     starts_at: request.starts_at,
                     ends_at: request.ends_at,
@@ -94,8 +100,9 @@ impl RoundApplication {
                 request.status.as_db_str()
             )));
         }
-        let (name, advancement_count) = validate_fields(
+        let (name, round_type, advancement_count) = validate_fields(
             &request.name,
+            &request.round_type,
             request.round_number,
             request.advancement_count,
             request.starts_at,
@@ -106,7 +113,7 @@ impl RoundApplication {
             pageant_id,
             name,
             round_number: request.round_number,
-            round_type: request.round_type,
+            round_type,
             status: request.status,
             advancement_count,
             starts_at: request.starts_at,
@@ -133,15 +140,22 @@ impl RoundApplication {
 
 fn validate_fields(
     raw_name: &str,
+    raw_round_type: &str,
     round_number: i32,
     advancement_count: Option<i32>,
     starts_at: Option<chrono::DateTime<chrono::Utc>>,
     ends_at: Option<chrono::DateTime<chrono::Utc>>,
-) -> Result<(String, Option<i32>), AppError> {
+) -> Result<(String, String, Option<i32>), AppError> {
     let name = raw_name.trim().to_owned();
     if name.is_empty() || name.len() > 150 {
         return Err(AppError::BadRequest(
             "name must be between 1 and 150 characters".to_owned(),
+        ));
+    }
+    let round_type = raw_round_type.trim().to_owned();
+    if round_type.is_empty() || round_type.chars().count() > 100 {
+        return Err(AppError::BadRequest(
+            "round_type must be between 1 and 100 characters".to_owned(),
         ));
     }
     if round_number <= 0 {
@@ -162,5 +176,5 @@ fn validate_fields(
             "ends_at must be later than starts_at".to_owned(),
         ));
     }
-    Ok((name, advancement_count))
+    Ok((name, round_type, advancement_count))
 }

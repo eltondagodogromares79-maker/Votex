@@ -22,12 +22,22 @@ Auth legend:
 | POST | `/api/v1/auth/register/organization` | Public | Register a new org owner + organization |
 | POST | `/api/v1/auth/register/audience` | Public | Register a new audience account |
 | POST | `/api/v1/auth/verify-email` | Public | Verify email with 6-digit OTP |
+| POST | `/api/v1/auth/send-verification-code` | Authenticated | Send a new verification code to the signed-in user's email |
 | POST | `/api/v1/auth/login` | Public | Login — returns access token + sets HttpOnly refresh cookie |
 | POST | `/api/v1/auth/refresh` | Public (cookie) | Refresh access token using HttpOnly cookie |
 | POST | `/api/v1/auth/logout` | Public (cookie) | Logout — clears refresh cookie |
 | GET  | `/api/v1/auth/me` | Bearer | Get own profile |
 | PUT  | `/api/v1/auth/me` | Bearer | Update own profile |
+| PUT  | `/api/v1/auth/me/email` | Bearer | Request an email change while the current address is unverified |
+| DELETE | `/api/v1/auth/me` | Bearer + current password + `confirmation: "DELETE"` | Delete and anonymize own account; deactivates owned organizations/pageants and retains anonymized history |
 | POST | `/api/v1/auth/change-password` | Bearer | Change own password |
+
+## Realtime — `/api/v1/realtime`
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/v1/realtime/ticket` | Bearer | Issue a short-lived, one-use WebSocket ticket |
+| GET | `/api/v1/realtime/pageants?pageantId={id}&ticket={ticket}` | One-use ticket + pageant assignment | Subscribe to low-detail score and pageant-change events |
 
 ---
 
@@ -35,15 +45,34 @@ Auth legend:
 
 All routes require Bearer token and `organization_id` path param.
 
+### Organization Profile
+
+| Method | Path | Permission | Description |
+|--------|------|------------|-------------|
+| GET | `/api/v1/organizations/{organization_id}` | `organization.read` | Get organization profile |
+| PUT | `/api/v1/organizations/{organization_id}` | `organization.update` | Update organization profile |
+
 ### Subscription & Billing
 
 | Method | Path | Permission | Description |
 |--------|------|-----------|-------------|
 | GET | `/api/v1/organizations/{organization_id}/subscription-plans` | `billing.read` | List available subscription plans |
+| GET | `/api/v1/organizations/{organization_id}/subscription-payment-mode` | `billing.read` | Get the configured subscription payment mode (`MANUAL` or `AUTOMATED`) |
 | GET | `/api/v1/organizations/{organization_id}/subscription` | `billing.read` | Get current subscription |
+| GET | `/api/v1/organizations/{organization_id}/subscription/usage` | `organization.read` | Get current plan limits and live organization/pageant resource usage |
+| GET | `/api/v1/organizations/{organization_id}/activity-logs` | `audit.read` | List organization-scoped activity records (50 per page, maximum 100) |
 | GET | `/api/v1/organizations/{organization_id}/subscriptions` | `billing.manage` | List subscription history |
 | POST | `/api/v1/organizations/{organization_id}/subscriptions` | `billing.manage` | Subscribe to a plan |
-| DELETE | `/api/v1/organizations/{organization_id}/subscriptions/{subscription_id}` | `billing.manage` | Cancel a subscription |
+| GET | `/api/v1/organizations/{organization_id}/subscriptions/pending-payment` | `billing.read` | Get pending subscription payment and latest proof |
+| POST | `/api/v1/organizations/{organization_id}/subscriptions/{subscription_id}/checkout` | `billing.manage` | Resume an existing PayMongo subscription checkout |
+| POST | `/api/v1/organizations/{organization_id}/subscriptions/{subscription_id}/payment-proof` | `billing.manage` | Submit manual payment proof |
+| GET | `/api/v1/admin/subscription-payment-proofs` | System `billing.manage` | List payment proofs awaiting review |
+| GET | `/api/v1/admin/subscription-payment-proofs/history` | System `billing.manage` | List recent proof review history |
+| POST | `/api/v1/admin/subscription-payment-proofs/{proof_id}/review` | System `billing.manage` | Approve or reject a payment proof |
+| POST | `/api/v1/admin/subscription-payment-proofs/{proof_id}/revoke-approval` | System `billing.manage` | Revoke an approval and cancel its active subscription |
+| GET | `/api/v1/admin/subscriptions/organizations/{organization_id}` | System `billing.manage` | View organization subscription, payment, proof, and admin action history |
+| POST | `/api/v1/admin/subscriptions/{subscription_id}/cancel` | System `billing.manage` | Cancel a subscription with a required reason |
+| DELETE | `/api/v1/organizations/{organization_id}/subscriptions/{subscription_id}` | `billing.manage` | Cancel a subscription only if the organization has never created a pageant |
 
 ### Revenue
 
@@ -60,7 +89,9 @@ All routes require Bearer token and `organization_id` path param.
 | POST | `/api/v1/organizations/{organization_id}/pageants` | `pageant.create` | Create a pageant |
 | GET | `/api/v1/organizations/{organization_id}/pageants/{pageant_id}` | `pageant.read` | Get a pageant |
 | PUT | `/api/v1/organizations/{organization_id}/pageants/{pageant_id}` | `pageant.update` | Update a pageant |
-| DELETE | `/api/v1/organizations/{organization_id}/pageants/{pageant_id}` | `pageant.delete` | Archive a pageant |
+| POST | `/api/v1/organizations/{organization_id}/pageants/{pageant_id}/publish` | `pageant.update` | Publish a draft pageant and enable its coordinator dashboard |
+| DELETE | `/api/v1/organizations/{organization_id}/pageants/{pageant_id}` | `pageant.delete` | Archive an untouched pageant; configured pageants remain and consume a plan slot |
+| POST | `/api/v1/organizations/{organization_id}/pageants/{pageant_id}/restore` | `pageant.update` | Restore an archived, untouched pageant if the plan has capacity |
 
 ### Coordinators
 
@@ -94,6 +125,7 @@ All routes require Bearer token and `organization_id` path param.
 | POST | `/api/v1/organizations/{organization_id}/pageants/{pageant_id}/vote-packages` | `voting.manage` | Create a vote package |
 | PUT | `/api/v1/organizations/{organization_id}/pageants/{pageant_id}/vote-packages/{package_id}` | `voting.manage` | Update a vote package |
 | DELETE | `/api/v1/organizations/{organization_id}/pageants/{pageant_id}/vote-packages/{package_id}` | `voting.manage` | Deactivate a vote package |
+| POST | `/api/v1/organizations/{organization_id}/pageants/{pageant_id}/vote-packages/{package_id}/activate` | `voting.manage` | Reactivate a vote package on a non-archived pageant |
 
 ---
 
@@ -129,6 +161,8 @@ All routes require Bearer token.
 | GET | `/api/v1/coordinator/pageants/{pageant_id}/contestants/{contestant_id}` | `contestant.read` | Get a contestant |
 | PUT | `/api/v1/coordinator/pageants/{pageant_id}/contestants/{contestant_id}` | `contestant.update` | Update a contestant |
 | DELETE | `/api/v1/coordinator/pageants/{pageant_id}/contestants/{contestant_id}` | `contestant.delete` | Deactivate a contestant |
+| GET | `/api/v1/coordinator/pageants/{pageant_id}/contestants/{contestant_id}/placements` | `contestant.read` | Get candidate category and round assignments |
+| PUT | `/api/v1/coordinator/pageants/{pageant_id}/contestants/{contestant_id}/placements` | `contestant.update` | Replace candidate category and round assignments; progressed rounds cannot be removed |
 
 ### Categories
 
@@ -139,6 +173,7 @@ All routes require Bearer token.
 | GET | `/api/v1/coordinator/pageants/{pageant_id}/categories/{category_id}` | `criteria.manage` | Get a category |
 | PUT | `/api/v1/coordinator/pageants/{pageant_id}/categories/{category_id}` | `criteria.manage` | Update a category |
 | DELETE | `/api/v1/coordinator/pageants/{pageant_id}/categories/{category_id}` | `criteria.manage` | Deactivate a category |
+| POST | `/api/v1/coordinator/pageants/{pageant_id}/categories/{category_id}/activate` | `criteria.manage` | Reactivate a category if the subscription has capacity |
 
 ### Criteria
 
@@ -149,6 +184,7 @@ All routes require Bearer token.
 | GET | `/api/v1/coordinator/pageants/{pageant_id}/criteria/{criterion_id}` | `criteria.manage` | Get a criterion |
 | PUT | `/api/v1/coordinator/pageants/{pageant_id}/criteria/{criterion_id}` | `criteria.manage` | Update a criterion |
 | DELETE | `/api/v1/coordinator/pageants/{pageant_id}/criteria/{criterion_id}` | `criteria.manage` | Deactivate a criterion |
+| POST | `/api/v1/coordinator/pageants/{pageant_id}/criteria/{criterion_id}/activate` | `criteria.manage` | Reactivate a criterion |
 
 ### Rounds
 
@@ -159,6 +195,8 @@ All routes require Bearer token.
 | GET | `/api/v1/coordinator/pageants/{pageant_id}/rounds/{round_id}` | `round.manage` | Get a round |
 | PUT | `/api/v1/coordinator/pageants/{pageant_id}/rounds/{round_id}` | `round.manage` | Update a round |
 | DELETE | `/api/v1/coordinator/pageants/{pageant_id}/rounds/{round_id}` | `round.manage` | Delete a round |
+| GET | `/api/v1/coordinator/pageants/{pageant_id}/rounds/{round_id}/judging-configuration` | `criteria.manage` | Get round categories, weighted category criteria, and assigned judges |
+| PUT | `/api/v1/coordinator/pageants/{pageant_id}/rounds/{round_id}/judging-configuration` | `criteria.manage` | Save round categories, category criteria (weights total 100%), and pageant judges |
 
 ---
 
@@ -235,8 +273,20 @@ All routes require Bearer token and system-level permissions.
 | GET | `/api/v1/admin/revenue` | `billing.read` | Platform revenue report |
 | GET | `/api/v1/admin/audit-logs` | `audit.read` | List audit logs |
 | GET | `/api/v1/admin/audit-logs/{id}` | `audit.read` | Get an audit log entry |
+| GET | `/api/v1/admin/contact-messages` | `audit.read` | List contact messages submitted by signed-in users |
+| GET | `/api/v1/admin/legal-policies` | `billing.manage` | List editable Terms, Privacy, and Refund policy documents |
+| PUT | `/api/v1/admin/legal-policies/{slug}` | `billing.manage` | Update and publish a policy (`terms`, `privacy`, `refund-policy`, or `cookie-policy`) |
+| POST | `/api/v1/contact` | Bearer token | Submit a contact message using the authenticated account's name and email |
 | GET | `/api/v1/admin/transaction-logs` | `transaction.read` | List transaction logs |
 | GET | `/api/v1/admin/transaction-logs/{id}` | `transaction.read` | Get a transaction log entry |
+
+---
+
+## Public Legal Policies — `/api/v1/audience/public/legal-policies`
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/v1/audience/public/legal-policies/{slug}` | None (rate limited) | Read a published legal policy (`terms`, `privacy`, `refund-policy`, or `cookie-policy`) |
 
 ---
 
@@ -274,5 +324,12 @@ curl -X POST http://localhost:8080/api/v1/auth/verify-email `
   -H "Content-Type: application/json" `
   -d '{
     "email": "romareselton79@gmail.com",
-    "code": "XXXXXX"
+    "code": "044282"
   }'
+
+INSERT INTO user_system_roles (user_id, role_id)
+SELECT u.id, r.id
+FROM users u
+CROSS JOIN roles r
+WHERE u.email = 'romareselton79@gmail.com'
+  AND r.code = 'PLATFORM_ADMIN';

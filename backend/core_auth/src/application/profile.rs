@@ -1,6 +1,8 @@
 use crate::{
     application::ports::profile_workflow::ProfileWorkflow,
-    contracts::profile::{ProfileResponse, UpdateProfileRequest},
+    contracts::profile::{
+        DeleteAccountRequest, ProfileResponse, RequestEmailChange, UpdateProfileRequest,
+    },
 };
 use core_infra::AppError;
 use std::sync::Arc;
@@ -49,5 +51,35 @@ impl ProfileApplication {
                 .filter(|v| !v.is_empty()),
         };
         self.workflow.update(id, role, profile).await
+    }
+
+    pub async fn request_email_change(
+        &self,
+        id: Uuid,
+        role: &str,
+        request: RequestEmailChange,
+    ) -> Result<ProfileResponse, AppError> {
+        let email = request.email.trim().to_owned();
+        if email.is_empty() {
+            return Err(AppError::BadRequest("email cannot be blank".to_owned()));
+        }
+        self.workflow
+            .request_email_change(id, role, RequestEmailChange { email })
+            .await
+    }
+
+    pub async fn delete_account(
+        &self,
+        id: Uuid,
+        request: DeleteAccountRequest,
+    ) -> Result<(), AppError> {
+        if request.confirmation != "DELETE" {
+            return Err(AppError::BadRequest(
+                "Type DELETE to confirm account deletion.".to_owned(),
+            ));
+        }
+        self.workflow
+            .delete_account(id, &request.current_password)
+            .await
     }
 }

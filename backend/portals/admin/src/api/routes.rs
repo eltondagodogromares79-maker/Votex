@@ -8,13 +8,22 @@ use core_infra::{
 
 use crate::api::handler::{
     activity_logs::{get_audit_log, get_transaction_log, list_audit_logs, list_transaction_logs},
-    directory::{get_organization, get_pageant, get_user, list_organizations, list_pageants, list_users},
+    contact_messages::{list as list_contact_messages, submit as submit_contact_message},
+    directory::{
+        get_organization, get_pageant, get_user, list_organizations, list_pageants, list_users,
+    },
+    legal_policies::{list as list_legal_policies, update as update_legal_policy},
     revenue::report as revenue_report,
     subscription_plans::{create, deactivate, get, list, update},
 };
 
 /// Register platform-admin endpoints behind JWT authentication and system RBAC.
 pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn TokenAuthenticator>) {
+    config.service(
+        web::scope("/api/v1/contact")
+            .wrap(JwtAuthentication::new(token_validator.clone()))
+            .route("", web::post().to(submit_contact_message)),
+    );
     config.service(
         web::scope("/api/v1/admin")
             .wrap(JwtAuthentication::new(token_validator))
@@ -63,6 +72,21 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                 web::resource("/audit-logs")
                     .wrap(AuthorizationGuard::system("audit.read"))
                     .route(web::get().to(list_audit_logs)),
+            )
+            .service(
+                web::resource("/contact-messages")
+                    .wrap(AuthorizationGuard::system("audit.read"))
+                    .route(web::get().to(list_contact_messages)),
+            )
+            .service(
+                web::resource("/legal-policies")
+                    .wrap(AuthorizationGuard::system("billing.manage"))
+                    .route(web::get().to(list_legal_policies)),
+            )
+            .service(
+                web::resource("/legal-policies/{slug}")
+                    .wrap(AuthorizationGuard::system("billing.manage"))
+                    .route(web::put().to(update_legal_policy)),
             )
             .service(
                 web::resource("/audit-logs/{id}")

@@ -7,7 +7,8 @@ use uuid::Uuid;
 use crate::{
     application::ports::admin_directory_workflow::AdminDirectoryWorkflow,
     domain::directory::{
-        AdminOrganization, AdminOrganizationSubscription, AdminPageant, AdminUser, OrganizationOwner,
+        AdminOrganization, AdminOrganizationSubscription, AdminPageant, AdminUser,
+        OrganizationOwner,
     },
 };
 
@@ -79,17 +80,23 @@ struct AdminOrganizationRow {
     sub_plan_name: Option<String>,
     sub_plan_code: Option<String>,
     sub_status: Option<String>,
+    payment_status: Option<String>,
+    proof_status: Option<String>,
     created_at: DateTime<Utc>,
 }
 
 impl From<AdminOrganizationRow> for AdminOrganization {
     fn from(row: AdminOrganizationRow) -> Self {
         let subscription = match (row.sub_plan_name, row.sub_plan_code, row.sub_status) {
-            (Some(plan_name), Some(plan_code), Some(status)) => Some(AdminOrganizationSubscription {
-                plan_name,
-                plan_code,
-                status,
-            }),
+            (Some(plan_name), Some(plan_code), Some(status)) => {
+                Some(AdminOrganizationSubscription {
+                    plan_name,
+                    plan_code,
+                    status,
+                    payment_status: row.payment_status,
+                    proof_status: row.proof_status,
+                })
+            }
             _ => None,
         };
         Self {
@@ -173,14 +180,14 @@ const ROLE_SUBQUERY: &str = "
             SELECT 1 FROM organization_members om
             INNER JOIN organization_member_roles omr ON omr.organization_member_id = om.id
             INNER JOIN roles r ON r.id = omr.role_id
-            WHERE om.user_id = u.id AND om.is_active = TRUE
+            WHERE om.user_id = u.id AND om.is_active = TRUE AND omr.is_active = TRUE
               AND r.scope = 'ORGANIZATION'::role_scope AND r.is_active = TRUE AND r.code = 'ORG_OWNER'
         ) THEN 'org_owner'
         WHEN EXISTS (
             SELECT 1 FROM organization_members om
             INNER JOIN organization_member_roles omr ON omr.organization_member_id = om.id
             INNER JOIN roles r ON r.id = omr.role_id
-            WHERE om.user_id = u.id AND om.is_active = TRUE
+            WHERE om.user_id = u.id AND om.is_active = TRUE AND omr.is_active = TRUE
               AND r.scope = 'ORGANIZATION'::role_scope AND r.is_active = TRUE AND r.code = 'ORG_COORDINATOR'
         ) THEN 'coordinator'
         WHEN EXISTS (
@@ -223,16 +230,28 @@ const ORGANIZATION_COLUMNS: &str = "
     sp.name AS sub_plan_name,
     sp.code::text AS sub_plan_code,
     os.status::text AS sub_status,
+    latest_payment.status AS payment_status,
+    latest_proof.status AS proof_status,
     organization.created_at
 ";
 
 const ORGANIZATION_FROM: &str = "
     FROM organizations organization
     INNER JOIN users owner ON owner.id = organization.owner_id
-    LEFT JOIN organization_subscriptions os
-        ON os.organization_id = organization.id
-        AND os.status IN ('TRIALING', 'ACTIVE', 'PAST_DUE', 'PAUSED')
+    LEFT JOIN LATERAL (
+        SELECT subscription.* FROM organization_subscriptions subscription
+        WHERE subscription.organization_id = organization.id
+        ORDER BY subscription.created_at DESC, subscription.id DESC LIMIT 1
+    ) os ON TRUE
     LEFT JOIN subscription_plans sp ON sp.id = os.plan_id
+    LEFT JOIN LATERAL (
+        SELECT payment.status::text AS status FROM payment_transactions payment
+        WHERE payment.subscription_id = os.id ORDER BY payment.created_at DESC LIMIT 1
+    ) latest_payment ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT proof.status FROM subscription_payment_proofs proof
+        WHERE proof.subscription_id = os.id ORDER BY proof.created_at DESC LIMIT 1
+    ) latest_proof ON TRUE
 ";
 
 const PAGEANT_COLUMNS: &str = "

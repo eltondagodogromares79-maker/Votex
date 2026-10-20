@@ -17,7 +17,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { forgotPasswordSchema, type ForgotPasswordFormValues } from "@/src/lib/validations/auth";
 import { cn } from "@/src/lib/utils";
-import { AuthLogoBrandPanel, AuthLogoMobile } from "@/src/features/auth/components/AuthLogo";
+import { AuthLogoBrandPanel } from "@/src/features/auth/components/AuthLogo";
 
 // ── Shared navy field styles ──────────────────────────────────────────────────
 const fieldLabel = "block text-small font-medium text-white/80 mb-1";
@@ -99,11 +99,6 @@ function ForgotPasswordInner() {
 
       {/* ── RIGHT form panel ───────────────────────────────────────── */}
       <div className="flex-1 lg:w-7/12 xl:w-[55%] bg-navy flex flex-col">
-
-        {/* Mobile top bar */}
-        <div className="lg:hidden h-14 flex items-center px-6 border-b border-white/8">
-          <AuthLogoMobile />
-        </div>
 
         <div className="flex-1 flex items-center justify-center
                         px-6 sm:px-10 md:px-16 lg:px-12 xl:px-16 py-12">

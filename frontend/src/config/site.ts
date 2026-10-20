@@ -12,14 +12,14 @@ export const SITE_CONFIG = {
   apiUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080",
 
   contact: {
-    email: "support@votex.app",
-    helpEmail: "help@votex.app",
+    email: "votexdagodog79@gmail.com",
+    helpEmail: "romareselton79@gmail.com",
   },
 
   social: {
-    facebook: "https://facebook.com/votexapp",
-    instagram: "https://instagram.com/votexapp",
-    whatsapp: "https://wa.me/639XXXXXXXXX", // replace with real WhatsApp number
+    facebook: "https://www.facebook.com/dagodogeltonromares",
+    instagram: "https://www.instagram.com/elton_dgdg/?hl=en",
+    whatsapp: "https://www.whatsapp.com", // replace with real WhatsApp number
   },
 
   /** Company / legal */

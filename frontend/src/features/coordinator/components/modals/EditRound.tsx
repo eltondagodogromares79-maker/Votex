@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { useUpdateRound } from "@/src/features/coordinator/hooks/useRounds";
@@ -14,9 +14,6 @@ import {
   editRoundFormSchema,
   Field,
   fieldInput,
-  ROUND_TYPE_OPTIONS,
-  toDatetimeLocalInput,
-  fromDatetimeLocalInput,
   type EditRoundFormValues,
 } from "./AddRound";
 
@@ -30,7 +27,7 @@ const STATUS_OPTIONS: { value: RoundStatus; label: string }[] = [
   { value: "DRAFT", label: "Draft" },
   { value: "OPEN", label: "Open" },
   { value: "CLOSED", label: "Closed" },
-  { value: "FINALIZED", label: "Finalized" },
+  { value: "FINALIZED", label: "Completed" },
 ];
 
 export default function EditRoundModal({
@@ -40,12 +37,12 @@ export default function EditRoundModal({
 }: EditRoundModalProps) {
   const updateRound = useUpdateRound(pageantId, round?.id ?? "");
   const { toast } = useToast();
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
     reset,
-    control,
     formState: { errors },
   } = useForm<EditRoundFormValues>({
     resolver: zodResolver(editRoundFormSchema),
@@ -58,8 +55,6 @@ export default function EditRoundModal({
         roundNumber: round.roundNumber,
         roundType: round.roundType,
         advancementCount: round.advancementCount ?? undefined,
-        startsAt: toDatetimeLocalInput(round.startsAt),
-        endsAt: toDatetimeLocalInput(round.endsAt),
         status: round.status,
       });
     }
@@ -71,21 +66,22 @@ export default function EditRoundModal({
   }
 
   async function onSubmit(data: EditRoundFormValues) {
+    setSubmitError(null);
     try {
       await updateRound.mutateAsync({
         name: data.name.trim(),
         roundNumber: data.roundNumber,
         roundType: data.roundType,
         advancementCount: data.advancementCount ?? null,
-        startsAt: fromDatetimeLocalInput(data.startsAt ?? ""),
-        endsAt: fromDatetimeLocalInput(data.endsAt ?? ""),
+        startsAt: round?.startsAt ?? null,
+        endsAt: round?.endsAt ?? null,
         status: data.status,
       });
 
       toast.success(`"${data.name.trim()}" updated.`);
       onClose();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.userMessage : "Failed to update round.");
+      setSubmitError(err instanceof ApiError ? err.userMessage : err instanceof Error ? err.message : "Failed to update round.");
     }
   }
 
@@ -141,21 +137,21 @@ export default function EditRoundModal({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <Field label={<>Round Type <span className="text-error">*</span></>} error={errors.roundType?.message}>
-            <select
+          <Field
+            label={<>Round Type <span className="text-error">*</span></>}
+            error={errors.roundType?.message}
+            hint="This can be any pageant-specific label, up to 100 characters."
+          >
+            <input
+              type="text"
+              maxLength={100}
               disabled={updateRound.isPending}
               {...register("roundType")}
               className={fieldInput}
-            >
-              {ROUND_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            />
           </Field>
 
-          <Field label={<>Status <span className="text-error">*</span></>} error={errors.status?.message}>
+          <Field label={<>Status <span className="text-error">*</span></>} error={errors.status?.message} hint="Opening requires category weights to total 100% per eligibility group and each category’s criteria to total 100 points.">
             <select
               disabled={updateRound.isPending}
               {...register("status")}
@@ -189,39 +185,7 @@ export default function EditRoundModal({
           </Field>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <Field label="Starts At" error={errors.startsAt?.message} hint="Optional.">
-            <Controller
-              control={control}
-              name="startsAt"
-              render={({ field }) => (
-                <input
-                  type="datetime-local"
-                  disabled={updateRound.isPending}
-                  value={field.value ?? ""}
-                  onChange={(e) => field.onChange(e.target.value)}
-                  className={fieldInput}
-                />
-              )}
-            />
-          </Field>
-
-          <Field label="Ends At" error={errors.endsAt?.message} hint="Optional.">
-            <Controller
-              control={control}
-              name="endsAt"
-              render={({ field }) => (
-                <input
-                  type="datetime-local"
-                  disabled={updateRound.isPending}
-                  value={field.value ?? ""}
-                  onChange={(e) => field.onChange(e.target.value)}
-                  className={fieldInput}
-                />
-              )}
-            />
-          </Field>
-        </div>
+        {submitError ? <div role="alert" className="border border-red-300 bg-red-950/50 px-4 py-3 text-small text-red-100"><p className="font-semibold">Could not update round</p><p className="mt-1 break-words">{submitError}</p></div> : null}
 
       </form>
     </Modal>

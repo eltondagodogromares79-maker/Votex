@@ -4,6 +4,7 @@ use crate::{
         advancement::Advancement,
         contestant::Contestant,
         pageant::AssignedPageant,
+        results::RoundResultEntry,
         round::Round,
         setup::{Category, Criterion},
     },
@@ -40,5 +41,13 @@ impl TabulationApplication {
         r: Uuid,
     ) -> Result<Vec<Advancement>, AppError> {
         self.workflow.advancements(u, p, r).await
+    }
+    pub async fn leaderboard(
+        &self,
+        u: Uuid,
+        p: Uuid,
+        r: Uuid,
+    ) -> Result<Vec<RoundResultEntry>, AppError> {
+        self.workflow.leaderboard(u, p, r).await
     }
 }

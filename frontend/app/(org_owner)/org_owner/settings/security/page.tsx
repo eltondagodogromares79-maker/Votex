@@ -4,6 +4,7 @@ import { useState } from "react";
 import OrgPageShell from "@/src/features/org_owner/components/OrgPageShell";
 import OrgBadge from "@/src/features/org_owner/components/OrgBadge";
 import { Button } from "@/src/components/ui/Button";
+import PasswordChangeForm from "@/src/features/auth/components/PasswordChangeForm";
 
 function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   return (
@@ -63,6 +64,8 @@ export default function SecuritySettingsPage() {
       ]}
     >
       <div className="max-w-full space-y-6">
+
+        <PasswordChangeForm />
 
         {/* Security overview */}
         <div className="bg-navy p-5 flex items-start gap-4">

@@ -81,7 +81,7 @@ impl PostgresAuthorizationWorkflow {
         organization_id: Uuid,
         permission: &str,
     ) -> Result<bool, AppError> {
-        let exists = sqlx::query_scalar!(
+        let exists = sqlx::query_scalar::<_, bool>(
             r#"
             SELECT EXISTS (
                 SELECT 1
@@ -97,15 +97,16 @@ impl PostgresAuthorizationWorkflow {
                 WHERE om.user_id = $1
                   AND om.organization_id = $2
                   AND om.is_active = TRUE
+                  AND omr.is_active = TRUE
                   AND r.scope = 'ORGANIZATION'
                   AND r.is_active = TRUE
                   AND p.code = $3
             ) AS "exists!"
             "#,
-            user_id,
-            organization_id,
-            permission
         )
+        .bind(user_id)
+        .bind(organization_id)
+        .bind(permission)
         .fetch_one(&self.pool)
         .await
         .map_err(|error| AppError::Database(Box::new(error)))?;

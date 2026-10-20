@@ -6,8 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     application::ports::{
-        subscription_workflow::SubscriptionWorkflow,
-        vote_package_workflow::VotePackageWorkflow,
+        subscription_workflow::SubscriptionWorkflow, vote_package_workflow::VotePackageWorkflow,
     },
     contracts::vote_packages::{CreateVotePackageRequest, UpdateVotePackageRequest},
     domain::vote_package::VotePackage,
@@ -23,7 +22,10 @@ impl VotePackageApplication {
         workflow: Arc<dyn VotePackageWorkflow>,
         subscription: Arc<dyn SubscriptionWorkflow>,
     ) -> Self {
-        Self { workflow, subscription }
+        Self {
+            workflow,
+            subscription,
+        }
     }
 
     pub async fn list(
@@ -53,16 +55,20 @@ impl VotePackageApplication {
             .subscription
             .current_plan(organization_id)
             .await?
-            .ok_or_else(|| AppError::BadRequest(
-                "Your organization does not have an active subscription. \
-                 Please subscribe to a plan before creating vote packages.".to_owned(),
-            ))?;
+            .ok_or_else(|| {
+                AppError::BadRequest(
+                    "Your organization does not have an active subscription. \
+                 Please subscribe to a plan before creating vote packages."
+                        .to_owned(),
+                )
+            })?;
 
         if !plan.public_voting_enabled {
             return Err(AppError::BadRequest(
                 "Your current subscription plan does not support public voting. \
                  Upgrade to a plan with public voting enabled to create vote packages \
-                 and collect audience voting revenue.".to_owned(),
+                 and collect audience voting revenue."
+                    .to_owned(),
             ));
         }
         // ─────────────────────────────────────────────────────────────────────
@@ -126,6 +132,17 @@ impl VotePackageApplication {
             .deactivate(organization_id, pageant_id, package_id)
             .await
     }
+
+    pub async fn activate(
+        &self,
+        organization_id: Uuid,
+        pageant_id: Uuid,
+        package_id: Uuid,
+    ) -> Result<(), AppError> {
+        self.workflow
+            .activate(organization_id, pageant_id, package_id)
+            .await
+    }
 }
 
 fn validate_package(
@@ -160,4 +177,27 @@ fn validate_package(
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_package;
+    use rust_decimal::Decimal;
+
+    #[test]
+    fn accepts_valid_package_and_zero_price() {
+        assert!(validate_package("  10 Votes ", 10, Decimal::ZERO, "PHP").is_ok());
+    }
+
+    #[test]
+    fn rejects_non_positive_vote_quantity_and_negative_price() {
+        assert!(validate_package("Votes", 0, Decimal::ONE, "PHP").is_err());
+        assert!(validate_package("Votes", 1, Decimal::new(-1, 0), "PHP").is_err());
+    }
+
+    #[test]
+    fn rejects_excess_precision_and_malformed_currency() {
+        assert!(validate_package("Votes", 1, Decimal::new(1001, 3), "PHP").is_err());
+        assert!(validate_package("Votes", 1, Decimal::ONE, "P1H").is_err());
+    }
 }

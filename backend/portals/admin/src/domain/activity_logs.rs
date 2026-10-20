@@ -55,6 +55,22 @@ pub struct AuditLog {
 }
 
 #[derive(Debug, Clone)]
+pub struct NewAuditLog {
+    pub organization_id: Uuid,
+    pub pageant_id: Option<Uuid>,
+    pub actor_user_id: Uuid,
+    pub action: String,
+    pub resource_type: String,
+    pub resource_id: Option<Uuid>,
+    pub after_data: Value,
+    pub request_id: Option<Uuid>,
+    pub ip_address: Option<String>,
+    pub user_agent: Option<String>,
+    pub success: bool,
+    pub failure_reason: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct TransactionLog {
     pub id: Uuid,
     pub transaction_type: String,

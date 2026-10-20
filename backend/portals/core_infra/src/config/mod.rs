@@ -11,6 +11,7 @@ pub struct AppConfig {
 
 #[derive(Debug, Clone)]
 pub struct PaymentConfig {
+    pub subscription_mode: SubscriptionPaymentMode,
     pub paymongo_secret_key: String,
     pub paymongo_webhook_secret: String,
     pub paymongo_success_url: String,
@@ -18,9 +19,26 @@ pub struct PaymentConfig {
     pub paymongo_payment_methods: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubscriptionPaymentMode {
+    Manual,
+    Automated,
+}
+
+impl SubscriptionPaymentMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Manual => "MANUAL",
+            Self::Automated => "AUTOMATED",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DatabaseConfig {
     pub url: String,
+    pub migrator_url: String,
+    pub runtime_role: String,
     pub max_connections: u32,
     pub min_connections: u32,
     pub acquire_timeout_secs: u64,
@@ -80,6 +98,10 @@ impl AppConfig {
         Self {
             database: DatabaseConfig {
                 url: require_env("DATABASE_URL"),
+                // Schema migrations and runtime queries must use separate roles.
+                migrator_url: require_env("MIGRATOR_DATABASE_URL"),
+                runtime_role: env::var("DATABASE_RUNTIME_ROLE")
+                    .unwrap_or_else(|_| "votex_runtime".into()),
 
                 max_connections: parse_env("DATABASE_MAX_CONNECTIONS", 20),
 
@@ -141,13 +163,27 @@ impl AppConfig {
             },
 
             payments: PaymentConfig {
+                subscription_mode: match env::var("SUBSCRIPTION_PAYMENT_MODE")
+                    .unwrap_or_else(|_| "MANUAL".into())
+                    .trim()
+                    .to_ascii_uppercase()
+                    .as_str()
+                {
+                    "MANUAL" => SubscriptionPaymentMode::Manual,
+                    "AUTOMATED" => SubscriptionPaymentMode::Automated,
+                    value => panic!(
+                        "Invalid SUBSCRIPTION_PAYMENT_MODE `{value}`. Use MANUAL or AUTOMATED."
+                    ),
+                },
                 paymongo_secret_key: env::var("PAYMONGO_SECRET_KEY").unwrap_or_default(),
                 paymongo_webhook_secret: env::var("PAYMONGO_WEBHOOK_SECRET_KEY")
                     .unwrap_or_default(),
-                paymongo_success_url: env::var("PAYMONGO_SUCCESS_URL")
-                    .unwrap_or_else(|_| "http://localhost:3000/payment/success".into()),
-                paymongo_cancel_url: env::var("PAYMONGO_CANCEL_URL")
-                    .unwrap_or_else(|_| "http://localhost:3000/payment/cancel".into()),
+                paymongo_success_url: env::var("PAYMONGO_SUCCESS_URL").unwrap_or_else(|_| {
+                    "http://localhost:3000/org_owner/billing/plans?checkout=success".into()
+                }),
+                paymongo_cancel_url: env::var("PAYMONGO_CANCEL_URL").unwrap_or_else(|_| {
+                    "http://localhost:3000/org_owner/billing/plans?checkout=cancelled".into()
+                }),
                 paymongo_payment_methods: env::var("PAYMONGO_PAYMENT_METHOD_TYPES")
                     .unwrap_or_else(|_| "gcash,paymaya,grab_pay,qrph,card".into())
                     .split(',')

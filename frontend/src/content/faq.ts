@@ -24,14 +24,14 @@ export const FAQ_ITEMS: FaqItem[] = [
     category: "general",
     question: "Who is Votex for?",
     answer:
-      "Votex is built for four types of users: Pageant Coordinators who set up and manage events; Judges who score candidates on tablets or any device; Tabulators who verify and finalize scores in real time; and Contestants or general users who want to follow along.",
+      "Votex supports pageant organizers and owners, coordinators, judges, tabulators, and audience members. Each role sees the pages and actions available to that account. Public pageant information can also be viewed without signing in.",
   },
   {
     id: "devices-supported",
     category: "general",
     question: "What devices does Votex work on?",
     answer:
-      "Votex is fully responsive and works on phones, tablets, and desktops. The judge scoring interface is specifically designed to be usable on a tablet in portrait or landscape orientation — which is how judges typically work backstage.",
+      "Votex is designed to work on phones, tablets, laptops, and desktop screens in a modern browser. Some management and scoring screens are easier to use on a larger display.",
   },
 
   // Coordinators
@@ -40,28 +40,28 @@ export const FAQ_ITEMS: FaqItem[] = [
     category: "coordinators",
     question: "How do I create a pageant?",
     answer:
-      "After subscribing to a plan, go to My Pageants and click New Pageant. Fill in the name, date, location, and cover image. You can then add candidates, categories, criteria, rounds, judges, and tabulators from the pageant management dashboard.",
+      "An organization owner needs an active subscription with available pageant capacity. In the organization owner portal, create a pageant and then configure its rounds, categories, criteria, candidates, and staff. Some configuration limits come from the selected plan.",
   },
   {
     id: "how-add-judge",
     category: "coordinators",
     question: "How do judges and tabulators log in?",
     answer:
-      "Judges and tabulators don't create their own accounts. You add them by entering their email and name — Votex generates a unique 6-digit login code you share with them. They log in using their email plus that code. You can regenerate the code at any time.",
+      "A coordinator or organization owner adds staff using their name and email. Staff sign in through the same email-and-password login as other users. New staff receive a temporary password and should change it after signing in. An existing account may be reused for assignments where organization access rules allow it.",
   },
   {
     id: "multiple-rounds",
     category: "coordinators",
     question: "Can I have multiple rounds in one pageant?",
     answer:
-      "Yes. You can create as many rounds as needed (Preliminary, Semi-Final, Final, etc.), set scoring categories per round, and advance candidates between rounds using the tabulator's advance feature.",
+      "Yes. You can create multiple rounds and attach categories to each one. Your subscription may limit how many rounds or categories you can configure. A round can be opened after its category weights and criteria are configured, and candidates can advance between rounds through the pageant workflow.",
   },
   {
     id: "candidate-status",
     category: "coordinators",
     question: "Can I eliminate or disqualify a candidate?",
     answer:
-      "Yes. From the Candidates section of your pageant, you can set any candidate's status to Active, Eliminated, or Disqualified. Eliminated and disqualified candidates are excluded from leaderboard calculations.",
+      "Candidate status can be managed from the pageant's Candidates section. The available statuses include Active, Eliminated, and Disqualified. Status and scoring rules affect how candidates appear in pageant results.",
   },
 
   // Billing
@@ -70,28 +70,28 @@ export const FAQ_ITEMS: FaqItem[] = [
     category: "billing",
     question: "How does billing work?",
     answer:
-      "Votex offers three plans: Basic (₱999, 1 pageant), Premium (₱2,999, up to 5 pageants), and Enterprise (₱9,999, unlimited pageants). You pay once per plan period and can create pageants up to your plan's limit.",
+      "Current plans, prices, billing terms, and usage limits are shown on the Pricing page. Plan availability and limits are managed by the Votex administrator, so check that page for the latest details. Custom plans may have individually configured terms.",
   },
   {
     id: "payment-methods",
     category: "billing",
     question: "What payment methods are accepted?",
     answer:
-      "You can pay online via PayMongo (credit/debit cards and e-wallets like GCash and Maya) or submit a manual bank transfer or GCash payment with a reference number, which is reviewed and approved by our team.",
+      "Payment options depend on the payment mode configured for Votex. Manual payment currently supports GCash, Maya, or MariBank and requires the amount paid and a reference number; an image proof is optional. Automated payments use PayMongo checkout, and the methods shown there depend on the PayMongo account and checkout configuration.",
   },
   {
     id: "when-subscription-activates",
     category: "billing",
     question: "When does my subscription activate?",
     answer:
-      "For manual payments, your subscription is activated after our team reviews and approves your payment — usually within one business day. For online payments via PayMongo, activation follows confirmation of your payment.",
+      "A manual payment stays pending until an administrator reviews and approves it. An automated PayMongo payment is activated after the backend receives and verifies PayMongo's payment confirmation. No review or activation time is guaranteed here.",
   },
   {
     id: "refund-policy-faq",
     category: "billing",
     question: "What is the refund policy?",
     answer:
-      "Refunds are available on unused plans before any pageant has been created under that subscription. Once you have created at least one pageant, the subscription is considered used. See our full Refund Policy for details.",
+      "Refund eligibility is governed by the current Refund Policy. Please read that policy for the applicable conditions and contact support or an administrator if you need help with a specific transaction.",
   },
 
   // Technical
@@ -100,20 +100,20 @@ export const FAQ_ITEMS: FaqItem[] = [
     category: "technical",
     question: "How does real-time scoring work?",
     answer:
-      "Votex uses a live WebSocket connection per pageant. When a judge submits a score, the tabulator's screen updates instantly without refreshing. The leaderboard recalculates automatically. If the connection drops, Votex reconnects automatically and shows a visible reconnecting indicator.",
+      "Votex provides authenticated, pageant-scoped live updates for supported screens. When the connection drops, the app attempts to reconnect and shows its connection state. Live updates depend on an active connection; refresh the page if a screen appears out of date.",
   },
   {
     id: "data-security",
     category: "technical",
     question: "Is my data secure?",
     answer:
-      "Yes. Passwords are hashed with Argon2id (industry standard). Session tokens are short-lived JWTs stored in memory only — never in localStorage. Refresh tokens are stored as HttpOnly cookies and use rotation with reuse detection to prevent token theft.",
+      "Votex uses security controls including Argon2id password hashing, short-lived access tokens held in memory, and HttpOnly refresh-token cookies with rotation. These controls help protect accounts, but no online service can promise absolute security. Use a unique password and keep it private.",
   },
   {
     id: "score-formula",
     category: "technical",
     question: "How are scores calculated?",
     answer:
-      "Each criterion has a weight. A candidate's total score for a round is: SUM(score × criterion weight) divided by the number of judges who have scored that candidate. Disqualified candidates are excluded from the leaderboard.",
+      "Judges score candidates against the criteria configured for each category. Criteria weights total 100% within a category, and category weights total 100% for each eligibility group in a round. Submitted judge scores are combined for the category results; the tabulator view shows the results by round and category. Exact results depend on the configured weights and submitted scores.",
   },
 ];

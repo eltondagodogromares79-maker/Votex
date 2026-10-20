@@ -61,7 +61,9 @@ Platform admins can inspect application activity logs with system-level permissi
 - `GET /api/v1/admin/audit-logs` and `GET /api/v1/admin/audit-logs/{id}` require `audit.read`.
 - `GET /api/v1/admin/transaction-logs` and `GET /api/v1/admin/transaction-logs/{id}` require `transaction.read`.
 
-Both list endpoints accept `organization_id`, `pageant_id`, `actor_user_id`, and an RFC 3339 `from`/`to` time range (`from` inclusive, `to` exclusive), plus `limit` and `offset` (default 50, max 100). Audit logs additionally filter on `action`, `resource_type`, and `success`; transaction logs filter on `transaction_type`, `status`, `reference_type`, and `reference_id`. These endpoints read the `audit_logs` and `transaction_logs` records; they do not create log records themselves.
+Both list endpoints accept `organization_id`, `pageant_id`, `actor_user_id`, and an RFC 3339 `from`/`to` time range (`from` inclusive, `to` exclusive), plus `limit` and `offset` (default 50, max 100). Audit logs additionally filter on `action`, `resource_type`, and `success`; transaction logs filter on `transaction_type`, `status`, `reference_type`, and `reference_id`.
+
+Organization owners can read their own organization's activity at `GET /api/v1/organizations/{organization_id}/activity-logs`, guarded by organization-scoped `audit.read`. Organization-scoped POST, PUT, PATCH, and DELETE requests are automatically written to `audit_logs` with the authenticated actor, endpoint, status, and request ID. Request bodies are intentionally excluded.
 
 ## Pageant vote packages
 
@@ -119,7 +121,7 @@ Coordinators can manage round definitions for assigned pageants using pageant pe
 - `GET` and `POST /api/v1/coordinator/pageants/{pageant_id}/rounds`
 - `GET`, `PUT`, and `DELETE /api/v1/coordinator/pageants/{pageant_id}/rounds/{round_id}`
 
-Round creation accepts `name`, `round_number`, `round_type` (`PRELIMINARY`, `SWIMWEAR`, `FORMAL_WEAR`, `TALENT`, `QUESTION_AND_ANSWER`, `FINAL`, or `CUSTOM`), optional `advancement_count`, `starts_at`, and `ends_at`. New rounds always start as `DRAFT`. Update accepts the same fields and a `status`; statuses can move forward `DRAFT` → `OPEN` → `CLOSED` → `FINALIZED`, and finalized rounds are immutable. A round can only be deleted while it is a draft and has no contestant registration, judge assignment, advancement, tabulation, or voting records. The API checks the caller's active coordinator assignment in addition to the route permission.
+Round creation accepts `name`, `round_number`, a user-defined `round_type` label (1–100 characters, such as `Preliminary`, `Talent`, or a pageant-specific round name), optional `advancement_count`, `starts_at`, and `ends_at`. New rounds always start as `DRAFT`. Update accepts the same fields and a `status`; statuses can move forward `DRAFT` → `OPEN` → `CLOSED` → `FINALIZED`, and finalized rounds are immutable. A round can only be deleted while it is a draft and has no contestant registration, judge assignment, advancement, tabulation, or voting records. The API checks the caller's active coordinator assignment in addition to the route permission.
 
 Run HTTP middleware integration coverage with:
 

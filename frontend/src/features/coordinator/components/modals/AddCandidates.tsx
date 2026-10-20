@@ -24,7 +24,7 @@ export const candidateFormSchema = createCandidateSchema
   .extend({
     middleName: z.string().max(100).optional(),
     displayName: z.string().max(250).optional(),
-    gender: z.string().max(50).optional(),
+    gender: z.enum(["Male", "Female"], { error: "Choose Male or Female." }),
     photoUrl: z
       .string()
       .url("Please enter a valid photo URL.")
@@ -47,7 +47,6 @@ const DEFAULT_VALUES: Partial<CandidateFormValues> = {
   middleName: "",
   lastName: "",
   displayName: "",
-  gender: "",
   photoUrl: "",
   biography: "",
 };
@@ -159,7 +158,7 @@ export default function AddCandidateModal({
           />
         </Field>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="space-y-4">
           <Field label={<>First Name <span className="text-error">*</span></>} error={errors.firstName?.message}>
             <input type="text" placeholder="First name" disabled={createContestant.isPending}
               {...register("firstName")} className={fieldInput} />
@@ -184,16 +183,11 @@ export default function AddCandidateModal({
               {...register("displayName")} className={fieldInput} />
           </Field>
 
-          <Field label="Gender" error={errors.gender?.message}>
-            <select
-              disabled={createContestant.isPending}
-              {...register("gender")}
-              className={fieldInput}
-            >
+          <Field label={<>Gender <span className="text-error">*</span></>} error={errors.gender?.message} hint="Category eligibility is set separately when you create a category.">
+            <select disabled={createContestant.isPending} {...register("gender")} className={fieldInput}>
               <option value="">Select gender</option>
-              <option value="Female">Female</option>
               <option value="Male">Male</option>
-              <option value="Other">Other</option>
+              <option value="Female">Female</option>
             </select>
           </Field>
         </div>

@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { TERMS_CONTENT } from "@/src/content/legal/terms";
 import { LegalPage } from "@/src/features/public/components/legal/LegalPage";
+import { getPublicLegalPolicy } from "@/src/features/public/api/publicServer";
 
-export const metadata: Metadata = {
-  title: "Terms & Conditions",
-  description: "Votex Terms & Conditions governing use of the platform.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const policy = await getPublicLegalPolicy("terms");
+  return { title: policy?.title ?? "Terms & Conditions", description: (policy?.intro ?? "Terms governing use of the VoteX pageant platform.").slice(0, 160), alternates: { canonical: "/terms" } };
+}
 
-export default function TermsPage() {
-  return <LegalPage content={TERMS_CONTENT} />;
+export default async function TermsPage() {
+  return <LegalPage policy={await getPublicLegalPolicy("terms")} />;
 }

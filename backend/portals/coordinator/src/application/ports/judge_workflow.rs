@@ -22,8 +22,23 @@ pub trait JudgeWorkflow: Send + Sync {
         last_name: &str,
         password_hash: &str,
         role: PageantStaffRole,
+        confirm_cross_organization_reuse: bool,
     ) -> Result<(PageantJudge, bool), AppError>;
     async fn revoke(
+        &self,
+        coordinator_id: Uuid,
+        pageant_id: Uuid,
+        user_id: Uuid,
+        role: PageantStaffRole,
+    ) -> Result<(), AppError>;
+    async fn activate(
+        &self,
+        coordinator_id: Uuid,
+        pageant_id: Uuid,
+        user_id: Uuid,
+        role: PageantStaffRole,
+    ) -> Result<(), AppError>;
+    async fn delete_assignment(
         &self,
         coordinator_id: Uuid,
         pageant_id: Uuid,

@@ -14,13 +14,13 @@ export default function AdminPageShell({
   title, subtitle, action, breadcrumbs, children,
 }: AdminPageShellProps) {
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex min-h-screen min-w-0 flex-col">
       <AdminHeader title={title} />
-      <div className="flex-1 px-6 py-6 max-w-full w-full mx-auto">
+      <div className="min-w-0 w-full flex-1 px-4 py-5 sm:px-6 sm:py-6">
 
         {breadcrumbs && breadcrumbs.length > 0 && (
           <nav aria-label="Breadcrumb" className="mb-4">
-            <ol className="flex items-center gap-1.5 text-caption text-muted">
+            <ol className="flex flex-wrap items-center gap-1.5 text-caption text-muted">
               {breadcrumbs.map((crumb, i) => (
                 <li key={i} className="flex items-center gap-1.5">
                   {i > 0 && (
@@ -37,12 +37,12 @@ export default function AdminPageShell({
           </nav>
         )}
 
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <div>
-            <h2 className="font-serif font-bold text-charcoal text-h1 leading-tight">{title}</h2>
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0">
+            <h2 className="break-words font-serif font-bold text-charcoal text-h1 leading-tight">{title}</h2>
             {subtitle && <p className="text-small text-muted mt-1 leading-relaxed">{subtitle}</p>}
           </div>
-          {action && <div className="shrink-0">{action}</div>}
+          {action && <div className="w-full shrink-0 sm:w-auto">{action}</div>}
         </div>
 
         {children}

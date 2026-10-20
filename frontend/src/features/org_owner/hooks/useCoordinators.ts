@@ -58,3 +58,8 @@ export function useRemoveCoordinator(orgId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: key(orgId) }),
   });
 }
+
+export function useSetCoordinatorActive(orgId: string, active: boolean) {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (userId: string) => active ? orgOwnerApi.activateCoordinator(orgId, userId) : orgOwnerApi.deactivateCoordinator(orgId, userId), onSuccess: () => qc.invalidateQueries({ queryKey: key(orgId) }) });
+}

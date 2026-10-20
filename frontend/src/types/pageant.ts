@@ -110,6 +110,7 @@ export interface PageantInvitation {
 export interface PageantResponse {
   id: string;
   organizationId: string;
+  organizationName?: string;
   createdBy: string;
   name: string;
   slug: string;

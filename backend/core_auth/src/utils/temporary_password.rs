@@ -22,3 +22,18 @@ pub fn generate_temporary_password() -> String {
     //   ! → special character
     format!("Aa1!{suffix}")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::generate_temporary_password;
+    use crate::utils::password_validation::validate_password;
+
+    #[test]
+    fn temporary_password_is_valid_and_eight_characters() {
+        for _ in 0..50 {
+            let password = generate_temporary_password();
+            assert_eq!(password.len(), 8);
+            assert!(validate_password(&password).is_ok());
+        }
+    }
+}

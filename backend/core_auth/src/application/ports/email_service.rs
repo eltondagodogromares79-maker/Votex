@@ -31,4 +31,19 @@ pub trait EmailSender: Send + Sync {
         let _ = (recipient, first_name, role_name, temporary_password);
         Err(AppError::Internal)
     }
+
+    async fn send_pageant_staff_credentials_email(
+        &self,
+        recipient: &str,
+        first_name: &str,
+        role_name: &str,
+        temporary_password: &str,
+        pageant_name: &str,
+        pageant_id: uuid::Uuid,
+        pageant_slug: &str,
+    ) -> Result<(), AppError> {
+        let _ = (pageant_name, pageant_id, pageant_slug);
+        self.send_staff_credentials_email(recipient, first_name, role_name, temporary_password)
+            .await
+    }
 }

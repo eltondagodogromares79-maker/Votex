@@ -1,183 +1,228 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import OrgPageShell from "@/src/features/org_owner/components/OrgPageShell";
 import OrgBadge from "@/src/features/org_owner/components/OrgBadge";
 import { Button } from "@/src/components/ui/Button";
+import { useSession } from "@/src/features/auth/context/SessionContext";
+import { useTransactions } from "@/src/features/org_owner/hooks/useTransactions";
+import type { OrganizationTransaction } from "@/src/types";
 
-// ─────────────────────────────────────────────────────────────────────────────
-type TxType   = "subscription" | "vote_package" | "refund";
-type TxStatus = "paid" | "pending" | "failed" | "refunded";
+const PAGE_SIZE = 50;
+type FilterStatus = "all" | "paid" | "pending" | "failed" | "refunded";
+type BadgeVariant = "success" | "warning" | "error" | "muted";
 
-interface Transaction {
-  id: string;
-  date: string;
-  description: string;
-  type: TxType;
-  amount: string;
-  status: TxStatus;
-  ref: string;
-  paymentMethod: string;
+function statusInfo(status: string): { label: string; variant: BadgeVariant } {
+  switch (status.toUpperCase()) {
+    case "COMPLETED": return { label: "Paid", variant: "success" };
+    case "PENDING":
+    case "PROCESSING": return { label: "Pending", variant: "warning" };
+    case "REFUNDED":
+    case "REVERSED": return { label: "Refunded / reversed", variant: "muted" };
+    case "FAILED":
+    case "CANCELLED": return { label: status === "CANCELLED" ? "Cancelled" : "Failed", variant: "error" };
+    default: return { label: status.replaceAll("_", " "), variant: "muted" };
+  }
 }
 
-const TRANSACTIONS: Transaction[] = [
-  { id:  "1", date: "Jun 14, 2026", description: "Pro Plan — Monthly",              type: "subscription",  amount: "₱2,500.00", status: "paid",     ref: "PAY-20260614", paymentMethod: "GCash"       },
-  { id:  "2", date: "Jun 10, 2026", description: "Vote Package — 500 votes",        type: "vote_package",  amount: "₱1,500.00", status: "paid",     ref: "PAY-20260610", paymentMethod: "Maya"        },
-  { id:  "3", date: "Jun 8, 2026",  description: "Vote Package — 200 votes",        type: "vote_package",  amount: "₱600.00",   status: "paid",     ref: "PAY-20260608", paymentMethod: "Credit Card" },
-  { id:  "4", date: "May 14, 2026", description: "Pro Plan — Monthly",              type: "subscription",  amount: "₱2,500.00", status: "paid",     ref: "PAY-20260514", paymentMethod: "GCash"       },
-  { id:  "5", date: "May 3, 2026",  description: "Vote Package — 100 votes",        type: "vote_package",  amount: "₱300.00",   status: "refunded", ref: "PAY-20260503", paymentMethod: "GCash"       },
-  { id:  "6", date: "Apr 14, 2026", description: "Pro Plan — Monthly",              type: "subscription",  amount: "₱2,500.00", status: "paid",     ref: "PAY-20260414", paymentMethod: "GCash"       },
-  { id:  "7", date: "Apr 14, 2026", description: "Refund — Vote Package 100 votes", type: "refund",        amount: "−₱300.00",  status: "refunded", ref: "REF-20260414", paymentMethod: "GCash"       },
-  { id:  "8", date: "Mar 14, 2026", description: "Basic Plan — Monthly",            type: "subscription",  amount: "₱1,200.00", status: "paid",     ref: "PAY-20260314", paymentMethod: "Bank Transfer"},
-];
+function matchesFilter(status: string, filter: FilterStatus) {
+  if (filter === "all") return true;
+  const key = status.toUpperCase();
+  if (filter === "paid") return key === "COMPLETED";
+  if (filter === "pending") return key === "PENDING" || key === "PROCESSING";
+  if (filter === "failed") return key === "FAILED" || key === "CANCELLED";
+  return key === "REFUNDED" || key === "REVERSED";
+}
 
-const STATUS_BADGE: Record<TxStatus, { label: string; variant: "success"|"warning"|"error"|"muted" }> = {
-  paid:     { label: "Paid",     variant: "success" },
-  pending:  { label: "Pending",  variant: "warning" },
-  failed:   { label: "Failed",   variant: "error"   },
-  refunded: { label: "Refunded", variant: "muted"   },
-};
+function typeLabel(type: string) {
+  switch (type.toUpperCase()) {
+    case "SUBSCRIPTION_PAYMENT":
+    case "SUBSCRIPTION_CHANGE": return "Subscription";
+    case "VOTE": return "Vote purchase";
+    case "PAYMENT": return "Payment";
+    default: return type.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+}
 
-const TYPE_LABEL: Record<TxType, string> = {
-  subscription: "Subscription",
-  vote_package: "Vote Package",
-  refund:       "Refund",
-};
+function reference(tx: OrganizationTransaction) {
+  return tx.providerTransactionId ?? tx.referenceId ?? tx.id;
+}
 
-type FilterStatus = TxStatus | "all";
+function formatAmount(amount: string | null, currency: string | null) {
+  if (amount == null) return "—";
+  if (!currency) return amount;
+  const value = Number(amount);
+  if (!Number.isFinite(value)) return `${currency} ${amount}`;
+  try {
+    return new Intl.NumberFormat("en-PH", { style: "currency", currency, maximumFractionDigits: 2 }).format(value);
+  } catch {
+    return `${currency} ${amount}`;
+  }
+}
 
-const SUMMARY = {
-  totalPaid:    TRANSACTIONS.filter((t) => t.status === "paid").reduce((s, t) => s + parseFloat(t.amount.replace(/[₱,−]/g, "")), 0),
-  totalRefunded: TRANSACTIONS.filter((t) => t.status === "refunded" && t.type !== "refund").length,
-  thisMonth:    TRANSACTIONS.filter((t) => t.date.startsWith("Jun") && t.status === "paid").reduce((s, t) => s + parseFloat(t.amount.replace(/[₱,−]/g, "")), 0),
-};
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function csvCell(value: string | null | undefined) {
+  return `"${(value ?? "").replaceAll('"', '""')}"`;
+}
+
+function exportCsv(items: OrganizationTransaction[]) {
+  const header = ["Date", "Description", "Type", "Amount", "Currency", "Reference", "Provider", "Status"];
+  const rows = items.map((tx) => [
+    tx.createdAt,
+    tx.description,
+    typeLabel(tx.transactionType),
+    tx.amount,
+    tx.currency,
+    reference(tx),
+    tx.provider,
+    tx.status,
+  ]);
+  const csv = [header, ...rows].map((row) => row.map((value) => csvCell(value == null ? "" : String(value))).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "votex-transaction-history.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function TransactionsPage() {
+  const { currentUser } = useSession();
+  const orgId = currentUser?.organizationId ?? "";
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [search, setSearch] = useState("");
+  const [offset, setOffset] = useState(0);
+  const { data, isLoading, isError, refetch } = useTransactions(orgId, { limit: PAGE_SIZE, offset });
+  const items = data?.items ?? [];
 
-  const filtered = TRANSACTIONS.filter((t) => {
-    const matchesStatus = statusFilter === "all" || t.status === statusFilter;
-    const matchesSearch =
-      t.description.toLowerCase().includes(search.toLowerCase()) ||
-      t.ref.toLowerCase().includes(search.toLowerCase());
-    return matchesStatus && matchesSearch;
-  });
+  const filtered = useMemo(() => items.filter((tx) => {
+    const query = search.trim().toLowerCase();
+    const matchesSearch = !query || [tx.description, reference(tx), tx.provider ?? "", tx.pageantName ?? ""]
+      .some((value) => value.toLowerCase().includes(query));
+    return matchesSearch && matchesFilter(tx.status, statusFilter);
+  }), [items, search, statusFilter]);
+
+  const completedByCurrency = items
+    .filter((tx) => tx.status.toUpperCase() === "COMPLETED" && tx.amount != null)
+    .reduce<Record<string, number>>((totals, tx) => {
+      const currency = tx.currency ?? "Unknown currency";
+      totals[currency] = (totals[currency] ?? 0) + Number(tx.amount);
+      return totals;
+    }, {});
+  const completedSummary = Object.entries(completedByCurrency)
+    .map(([currency, amount]) => formatAmount(String(amount), currency))
+    .join(" · ") || "—";
+  const refundedCount = items.filter((tx) => ["REFUNDED", "REVERSED"].includes(tx.status.toUpperCase())).length;
 
   return (
     <OrgPageShell
       title="Transaction History"
-      subtitle="A full record of all payments and refunds for your organization."
+      subtitle="Payments and transaction records for your organization."
       breadcrumbs={[
-        { label: "Dashboard",  href: "/org_owner/dashboard" },
-        { label: "Billing",    href: "/org_owner/billing" },
+        { label: "Dashboard", href: "/org_owner/dashboard" },
+        { label: "Billing", href: "/org_owner/billing" },
         { label: "Transactions" },
       ]}
-      action={<Button variant="ghost" size="sm">Export CSV</Button>}
+      action={<Button variant="ghost" size="sm" disabled={!filtered.length} onClick={() => exportCsv(filtered)}>Export current results</Button>}
     >
-      {/* Summary strip */}
-      <div className="grid grid-cols-3 gap-4 mb-7">
+      <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="bg-navy p-5">
-          <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-gold/70 mb-1">Total Paid</p>
-          <p className="font-serif font-bold text-gold text-[1.75rem] leading-none tabular-nums">
-            ₱{SUMMARY.totalPaid.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
-          </p>
-          <p className="text-caption text-white/40 mt-1">All time</p>
+          <p className="mb-1 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-gold/70">Completed in results</p>
+          <p className="font-serif text-xl font-bold tabular-nums leading-tight text-gold">{isLoading ? "Loading…" : completedSummary}</p>
+          <p className="mt-1 text-caption text-white/40">Current page, grouped by currency</p>
         </div>
-        <div className="bg-surface border border-border p-5">
-          <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted mb-1">This Month</p>
-          <p className="font-serif font-bold text-charcoal text-[1.75rem] leading-none tabular-nums">
-            ₱{SUMMARY.thisMonth.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
-          </p>
-          <p className="text-caption text-muted mt-1">June 2026</p>
+        <div className="border border-border bg-surface p-5">
+          <p className="mb-1 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted">Refunded or reversed</p>
+          <p className="font-serif text-[1.75rem] font-bold leading-none tabular-nums text-charcoal">{isLoading ? "—" : refundedCount}</p>
+          <p className="mt-1 text-caption text-muted">On this page</p>
         </div>
-        <div className="bg-surface border border-border p-5">
-          <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted mb-1">Total Transactions</p>
-          <p className="font-serif font-bold text-charcoal text-[1.75rem] leading-none">{TRANSACTIONS.length}</p>
-          <p className="text-caption text-muted mt-1">Including refunds</p>
+        <div className="border border-border bg-surface p-5">
+          <p className="mb-1 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted">Transactions loaded</p>
+          <p className="font-serif text-[1.75rem] font-bold leading-none tabular-nums text-charcoal">{isLoading ? "—" : items.length}</p>
+          <p className="mt-1 text-caption text-muted">Page size {data?.limit ?? PAGE_SIZE}</p>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-5">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row">
         <div className="relative max-w-xs flex-1">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24" aria-hidden="true">
+          <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
           </svg>
-          <input type="text" placeholder="Search by description or reference…" value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-9 pl-9 pr-3 bg-surface border border-border text-small text-charcoal placeholder:text-muted focus:outline-none focus:border-navy transition-colors" />
+          <input type="text" placeholder="Search description, reference, provider…" value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="h-9 w-full border border-border bg-surface pl-9 pr-3 text-small text-charcoal placeholder:text-muted transition-colors focus:border-navy focus:outline-none" />
         </div>
-        <div className="flex gap-1">
-          {(["all", "paid", "pending", "failed", "refunded"] as FilterStatus[]).map((s) => (
-            <button key={s} type="button" onClick={() => setStatusFilter(s)}
-              className={`h-9 px-3 text-caption font-medium transition-colors border capitalize
-                ${statusFilter === s ? "bg-navy text-white border-navy" : "bg-surface text-muted border-border hover:border-navy hover:text-navy"}`}>
-              {s === "all" ? "All" : STATUS_BADGE[s as TxStatus]?.label ?? s}
+        <div className="flex flex-wrap gap-1">
+          {(["all", "paid", "pending", "failed", "refunded"] as FilterStatus[]).map((status) => (
+            <button key={status} type="button" onClick={() => setStatusFilter(status)}
+              className={`h-9 border px-3 text-caption font-medium capitalize transition-colors ${statusFilter === status ? "border-navy bg-navy text-white" : "border-border bg-surface text-muted hover:border-navy hover:text-navy"}`}>
+              {status === "all" ? "All" : status === "paid" ? "Paid" : status === "refunded" ? "Refunded" : status === "failed" ? "Failed / cancelled" : "Pending"}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Table */}
-      <div className="border border-border bg-surface overflow-hidden overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[680px]">
-          <thead>
-            <tr className="border-b border-border bg-navy/4">
-              <th className="px-4 py-3 text-caption font-semibold uppercase tracking-[0.1em] text-muted">Date</th>
-              <th className="px-4 py-3 text-caption font-semibold uppercase tracking-[0.1em] text-muted">Description</th>
-              <th className="px-4 py-3 text-caption font-semibold uppercase tracking-[0.1em] text-muted hidden sm:table-cell">Type</th>
-              <th className="px-4 py-3 text-caption font-semibold uppercase tracking-[0.1em] text-muted">Amount</th>
-              <th className="px-4 py-3 text-caption font-semibold uppercase tracking-[0.1em] text-muted hidden md:table-cell">Reference</th>
-              <th className="px-4 py-3 text-caption font-semibold uppercase tracking-[0.1em] text-muted hidden md:table-cell">Method</th>
-              <th className="px-4 py-3 text-caption font-semibold uppercase tracking-[0.1em] text-muted">Status</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-small text-muted">
-                  No transactions found.
-                </td>
-              </tr>
-            ) : (
-              filtered.map((tx) => (
-                <tr key={tx.id} className="border-b border-border/60 last:border-b-0 hover:bg-slate/30 transition-colors">
-                  <td className="px-4 py-3 text-small text-muted whitespace-nowrap">{tx.date}</td>
-                  <td className="px-4 py-3">
-                    <p className="text-small font-medium text-charcoal">{tx.description}</p>
-                  </td>
-                  <td className="px-4 py-3 hidden sm:table-cell">
-                    <span className="text-caption text-muted">{TYPE_LABEL[tx.type]}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-small font-semibold tabular-nums ${tx.type === "refund" ? "text-error" : "text-charcoal"}`}>
-                      {tx.amount}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <span className="font-mono text-caption text-muted">{tx.ref}</span>
-                  </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <span className="text-caption text-muted">{tx.paymentMethod}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <OrgBadge variant={STATUS_BADGE[tx.status].variant}>{STATUS_BADGE[tx.status].label}</OrgBadge>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button type="button" className="text-caption text-muted hover:text-navy transition-colors whitespace-nowrap">Receipt</button>
-                  </td>
+      {isError ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border border-error/25 bg-surface p-5">
+          <p className="text-small text-error">Could not load transaction history.</p>
+          <Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>
+        </div>
+      ) : (
+        <>
+          <div className="overflow-hidden overflow-x-auto border border-border bg-surface">
+            <table className="w-full min-w-[760px] border-collapse text-left">
+              <thead>
+                <tr className="border-b border-border bg-navy/4">
+                  <th className="px-4 py-3 text-caption font-semibold uppercase tracking-[0.1em] text-muted">Date</th>
+                  <th className="px-4 py-3 text-caption font-semibold uppercase tracking-[0.1em] text-muted">Description</th>
+                  <th className="hidden px-4 py-3 text-caption font-semibold uppercase tracking-[0.1em] text-muted sm:table-cell">Type</th>
+                  <th className="px-4 py-3 text-caption font-semibold uppercase tracking-[0.1em] text-muted">Amount</th>
+                  <th className="hidden px-4 py-3 text-caption font-semibold uppercase tracking-[0.1em] text-muted md:table-cell">Reference</th>
+                  <th className="hidden px-4 py-3 text-caption font-semibold uppercase tracking-[0.1em] text-muted md:table-cell">Provider</th>
+                  <th className="px-4 py-3 text-caption font-semibold uppercase tracking-[0.1em] text-muted">Status</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-      {filtered.length > 0 && (
-        <p className="text-caption text-muted mt-3">
-          Showing {filtered.length} of {TRANSACTIONS.length} transactions
-        </p>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  <tr><td colSpan={7} className="px-4 py-12 text-center text-small text-muted">Loading transactions…</td></tr>
+                ) : filtered.length === 0 ? (
+                  <tr><td colSpan={7} className="px-4 py-12 text-center text-small text-muted">{items.length ? "No transactions match your search or filter." : "No transactions recorded yet."}</td></tr>
+                ) : filtered.map((tx) => {
+                  const status = statusInfo(tx.status);
+                  return (
+                    <tr key={`${tx.source}-${tx.id}`} className="border-b border-border/60 last:border-b-0 hover:bg-slate/30">
+                      <td className="whitespace-nowrap px-4 py-3 text-small text-muted">{formatDate(tx.createdAt)}</td>
+                      <td className="px-4 py-3">
+                        <p className="text-small font-medium text-charcoal">{tx.description}</p>
+                        {tx.pageantName && <p className="mt-0.5 text-caption text-muted">{tx.pageantName}</p>}
+                      </td>
+                      <td className="hidden px-4 py-3 text-caption text-muted sm:table-cell">{typeLabel(tx.transactionType)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-small font-semibold tabular-nums text-charcoal">{formatAmount(tx.amount, tx.currency)}</td>
+                      <td className="hidden max-w-48 truncate px-4 py-3 font-mono text-caption text-muted md:table-cell" title={reference(tx)}>{reference(tx)}</td>
+                      <td className="hidden px-4 py-3 text-caption text-muted md:table-cell">{tx.provider ?? "—"}</td>
+                      <td className="px-4 py-3"><OrgBadge variant={status.variant}>{status.label}</OrgBadge></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-caption text-muted">
+              {items.length ? `Showing ${offset + 1}–${offset + items.length}${items.length === data?.limit ? " or more" : ""}` : "Showing 0 transactions"}
+              {filtered.length !== items.length && ` · ${filtered.length} match current filters`}
+            </p>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" disabled={offset === 0 || isLoading} onClick={() => setOffset(Math.max(offset - PAGE_SIZE, 0))}>Previous</Button>
+              <Button variant="secondary" size="sm" disabled={items.length < (data?.limit ?? PAGE_SIZE) || isLoading} onClick={() => setOffset(offset + PAGE_SIZE)}>Next</Button>
+            </div>
+          </div>
+        </>
       )}
     </OrgPageShell>
   );

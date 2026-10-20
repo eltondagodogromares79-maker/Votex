@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PRICING_PLANS, formatPlanPrice, BILLING_PERIOD_LABELS } from "@/src/lib/pricing";
 import { Button } from "@/src/components/ui/Button";
-import { SITE_CONFIG } from "@/src/config/site";
+import { PublicPricingPlans } from "@/src/features/public/components/PublicPricingPlans";
+import { PublicDashboardLink } from "@/src/features/public/components/PublicDashboardLink";
+import { getPublicPlans } from "@/src/features/public/api/publicServer";
 
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "₱449 per event, ₱999/month for 3 pageants, or contact us for a custom enterprise plan.",
+    "Compare Votex subscription plans and features for pageant organizers.",
+  alternates: { canonical: "/pricing" },
 };
 
 const ALL_FEATURES = [
@@ -22,7 +24,8 @@ const ALL_FEATURES = [
   
 ];
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const initialPlans = await getPublicPlans();
   return (
     <>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
@@ -48,107 +51,7 @@ export default function PricingPage() {
       {/* ── Plans ─────────────────────────────────────────────────────── */}
       <section className="py-16 bg-slate">
         <div className="container-page">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
-            {PRICING_PLANS.map((plan) => {
-              const isEnterprise = plan.price === null;
-
-              return (
-                <div
-                  key={plan.id}
-                  className={`bg-surface rounded-sm overflow-hidden flex flex-col relative
-                    hover:translate-y-[-2px] transition-transform duration-200
-                    ${plan.highlighted ? "ring-2 ring-gold" : ""}`}
-                >
-                  {/* Recommended badge */}
-                  {plan.highlighted && (
-                    <div className="absolute -top-3.5 left-0 right-0 flex justify-center z-10">
-                      <span className="bg-gold text-navy text-caption font-bold
-                                       px-4 py-0.5 tracking-wide uppercase">
-                        Recommended
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Card header — navy band */}
-                  <div className="bg-navy px-5 py-4 flex items-center justify-between gap-2">
-                    <div>
-                      <p className="text-caption font-semibold uppercase tracking-widest text-gold">
-                        {plan.name}
-                      </p>
-                      <p className="text-caption text-white/45 mt-0.5">{plan.tagline}</p>
-                    </div>
-                    {isEnterprise && (
-                      <span className="text-caption font-semibold text-gold/60 uppercase tracking-wide">
-                        Custom
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Price block */}
-                  <div className="px-5 py-5 border-b border-border">
-                    {isEnterprise ? (
-                      <p className="font-serif font-bold text-charcoal text-h1 leading-none mb-1">
-                        Let&apos;s talk
-                      </p>
-                    ) : (
-                      <div className="flex items-baseline gap-1.5 mb-1">
-                        <p className="font-serif font-bold text-charcoal text-h1 leading-none">
-                          {formatPlanPrice(plan)}
-                        </p>
-                        <p className="text-small text-muted">
-                          {BILLING_PERIOD_LABELS[plan.billing]}
-                        </p>
-                      </div>
-                    )}
-                    <p className="text-small text-muted leading-relaxed mt-2">
-                      {plan.description}
-                    </p>
-                  </div>
-
-                  {/* Features */}
-                  <div className="px-5 py-5 flex-1">
-                    <p className="text-caption font-semibold uppercase tracking-[0.14em]
-                                  text-gold/60 mb-4">
-                      What&apos;s included
-                    </p>
-                    <ul className="space-y-2.5">
-                      {plan.features.map((f) => (
-                        <li key={f}
-                          className="flex items-start gap-2.5 text-small text-charcoal leading-snug">
-                          <span className="text-gold mt-0.5 shrink-0" aria-hidden="true">✦</span>
-                          {f}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* CTA */}
-                  <div className="px-5 pb-5 border-t border-border pt-5">
-                    <Link href={plan.ctaHref}>
-                      <Button
-                        variant={plan.highlighted ? "secondary" : "primary"}
-                        size="md"
-                        fullWidth
-                      >
-                        {plan.cta}
-                      </Button>
-                    </Link>
-                    {isEnterprise && (
-                      <p className="text-caption text-muted text-center mt-3">
-                        or email{" "}
-                        <a
-                          href={`mailto:${SITE_CONFIG.contact.email}`}
-                          className="text-navy hover:underline"
-                        >
-                          {SITE_CONFIG.contact.email}
-                        </a>
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <PublicPricingPlans initialPlans={initialPlans ?? undefined} />
 
           {/* FAQ nudge */}
           <div className="mt-10 text-center">
@@ -202,11 +105,9 @@ export default function PricingPage() {
             Set up your event in minutes. No credit card required to start.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link href="/register">
-              <Button variant="secondary" size="md">Get started free</Button>
-            </Link>
+            <PublicDashboardLink href="/register" label="Get started free" />
             <Link href="/contact">
-              <Button variant="ghost" size="md"
+              <Button variant="primary" size="md"
                 className="text-white/60 border-white/15 hover:bg-white/8 hover:text-white">
                 Talk to us
               </Button>

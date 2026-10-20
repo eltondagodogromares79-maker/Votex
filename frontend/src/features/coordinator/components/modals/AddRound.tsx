@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -17,16 +17,8 @@ import { ApiError } from "@/src/lib/api/client";
 export const roundFormSchema = z.object({
   name: z.string().min(1, "Required").max(150),
   roundNumber: z.number().int().min(1, "Must be at least 1"),
-  roundType: z.enum([
-    "PRELIMINARY",
-    "SWIMWEAR",
-    "FORMAL_WEAR",
-    "TALENT",
-    "QUESTION_AND_ANSWER",
-    "FINAL",
-    "CUSTOM",
-  ]),
-  advancementCount: z.number().int().min(0).nullable().optional(),
+  roundType: z.string().trim().min(1, "Round type is required").max(100, "Round type must be 100 characters or fewer"),
+  advancementCount: z.number().int().min(1, "Must be at least 1").nullable().optional(),
   startsAt: z.string().optional(),
   endsAt: z.string().optional(),
 });
@@ -43,29 +35,34 @@ export const editRoundFormSchema = roundFormSchema.extend({
 
 export type EditRoundFormValues = z.infer<typeof editRoundFormSchema>;
 
-export const ROUND_TYPE_OPTIONS: { value: RoundFormValues["roundType"]; label: string }[] = [
-  { value: "PRELIMINARY", label: "Preliminary" },
-  { value: "SWIMWEAR", label: "Swimwear" },
-  { value: "FORMAL_WEAR", label: "Formal Wear" },
-  { value: "TALENT", label: "Talent" },
-  { value: "QUESTION_AND_ANSWER", label: "Question & Answer" },
-  { value: "FINAL", label: "Final" },
-  { value: "CUSTOM", label: "Custom" },
-];
+const addRoundFormSchema = z.object({
+  name: z.string().trim().min(1, "Enter a round name.").max(150),
+  roundNumber: z.number().int().min(1, "Order must be at least 1."),
+  advancementType: z.enum(["UNLIMITED", "LIMITED"]),
+  advancementCount: z.number().int().min(1, "Enter at least one advancing candidate.").optional(),
+  status: z.enum(["DRAFT", "OPEN"]),
+}).superRefine((data, context) => {
+  if (data.advancementType === "LIMITED" && data.advancementCount === undefined) {
+    context.addIssue({ code: "custom", path: ["advancementCount"], message: "Enter how many candidates advance." });
+  }
+});
+
+type AddRoundFormValues = z.infer<typeof addRoundFormSchema>;
 
 type AddRoundModalProps = {
   pageantId: string;
   open: boolean;
   onClose: () => void;
+  canAdd?: boolean;
+  limitMessage?: string;
 };
 
-const DEFAULT_VALUES: Partial<RoundFormValues> = {
+const DEFAULT_VALUES: Partial<AddRoundFormValues> = {
   name: "",
   roundNumber: undefined,
-  roundType: "PRELIMINARY",
+  advancementType: "UNLIMITED",
   advancementCount: undefined,
-  startsAt: "",
-  endsAt: "",
+  status: "DRAFT",
 };
 
 // ─── Design tokens — auth page palette (matches org_owner modal conventions) ──
@@ -119,24 +116,28 @@ export default function AddRoundModal({
   pageantId,
   open,
   onClose,
+  canAdd = true,
+  limitMessage,
 }: AddRoundModalProps) {
   const createRound = useCreateRound(pageantId);
   const { toast } = useToast();
+  const [requestError, setRequestError] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
     reset,
-    control,
+    watch,
     formState: { errors },
-  } = useForm<RoundFormValues>({
-    resolver: zodResolver(roundFormSchema),
+  } = useForm<AddRoundFormValues>({
+    resolver: zodResolver(addRoundFormSchema),
     defaultValues: DEFAULT_VALUES,
   });
 
   useEffect(() => {
     if (!open) {
       reset(DEFAULT_VALUES);
+      setRequestError(null);
     }
   }, [open, reset]);
 
@@ -145,22 +146,28 @@ export default function AddRoundModal({
     onClose();
   }
 
-  async function onSubmit(data: RoundFormValues) {
+  async function onSubmit(data: AddRoundFormValues) {
+    setRequestError(null);
+    if (!canAdd) {
+      setRequestError(limitMessage ?? "The subscription limit for rounds has been reached.");
+      return;
+    }
     try {
       await createRound.mutateAsync({
         name: data.name.trim(),
         roundNumber: data.roundNumber,
-        roundType: data.roundType,
-        advancementCount: data.advancementCount ?? null,
-        startsAt: fromDatetimeLocalInput(data.startsAt ?? ""),
-        endsAt: fromDatetimeLocalInput(data.endsAt ?? ""),
+        roundType: data.name.trim(),
+        status: data.status,
+        advancementCount: data.advancementType === "LIMITED" ? data.advancementCount ?? null : null,
+        startsAt: null,
+        endsAt: null,
       });
 
       toast.success(`"${data.name.trim()}" added as a round.`);
       reset(DEFAULT_VALUES);
       onClose();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.userMessage : "Failed to add round.");
+      setRequestError(err instanceof ApiError ? err.userMessage : "Failed to add round. Please try again.");
     }
   }
 
@@ -182,6 +189,7 @@ export default function AddRoundModal({
             form="add-round-form"
             type="submit"
             loading={createRound.isPending}
+            disabled={!canAdd || createRound.isPending}
           >
             Add Round
           </Button>
@@ -189,100 +197,38 @@ export default function AddRoundModal({
       }
     >
       <form id="add-round-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
+        {!canAdd && limitMessage ? <div role="status" className="border border-amber-300 bg-amber-50 px-4 py-3 text-small text-amber-900">{limitMessage}</div> : null}
+        {requestError ? <div role="alert" className="border border-red-300 bg-red-950/40 px-4 py-3 text-small text-red-100"><p className="font-semibold">Could not add round</p><p className="mt-1 leading-relaxed">{requestError}</p></div> : null}
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          <div className="sm:col-span-2">
-            <Field label={<>Name <span className="text-error">*</span></>} error={errors.name?.message}>
-              <input
-                type="text"
-                placeholder="e.g. Preliminary Round"
-                disabled={createRound.isPending}
-                autoFocus
-                {...register("name")}
-                className={fieldInput}
-              />
-            </Field>
-          </div>
-
-          <Field label={<>Round Number <span className="text-error">*</span></>} error={errors.roundNumber?.message}>
-            <input
-              type="number"
-              min={1}
-              placeholder="e.g. 1"
-              disabled={createRound.isPending}
-              {...register("roundNumber", { valueAsNumber: true })}
-              className={fieldInput}
-            />
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <Field label={<>Name <span className="text-error">*</span></>} error={errors.name?.message}>
+            <input type="text" placeholder="e.g. Preliminary" disabled={createRound.isPending} autoFocus {...register("name")} className={fieldInput} />
+          </Field>
+          <Field label={<>Order <span className="text-error">*</span></>} error={errors.roundNumber?.message} hint="The order this round appears in.">
+            <input type="number" min={1} placeholder="e.g. 1" disabled={createRound.isPending} {...register("roundNumber", { valueAsNumber: true })} className={fieldInput} />
           </Field>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <Field label={<>Round Type <span className="text-error">*</span></>} error={errors.roundType?.message}>
-            <select
-              disabled={createRound.isPending}
-              {...register("roundType")}
-              className={fieldInput}
-            >
-              {ROUND_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <Field label={<>Advancement type <span className="text-error">*</span></>} error={errors.advancementType?.message}>
+            <select disabled={createRound.isPending} {...register("advancementType")} className={fieldInput}>
+              <option value="UNLIMITED">No fixed number</option>
+              <option value="LIMITED">Set number advancing</option>
             </select>
           </Field>
-
-          <Field
-            label="Advancement Count"
-            error={errors.advancementCount?.message}
-            hint="Optional. Number of candidates advancing from this round."
-          >
-            <input
-              type="number"
-              min={0}
-              placeholder="e.g. 10"
-              disabled={createRound.isPending}
-              {...register("advancementCount", {
-                setValueAs: (v) => (v === "" ? undefined : Number(v)),
-              })}
-              className={fieldInput}
-            />
+          <Field label={<>Status <span className="text-error">*</span></>} error={errors.status?.message} hint="A round can be opened after its categories and criteria are configured.">
+            <select disabled={createRound.isPending} {...register("status")} className={fieldInput}>
+              <option value="DRAFT">Draft</option>
+              <option value="OPEN">Open</option>
+            </select>
           </Field>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <Field label="Starts At" error={errors.startsAt?.message} hint="Optional.">
-            <Controller
-              control={control}
-              name="startsAt"
-              render={({ field }) => (
-                <input
-                  type="datetime-local"
-                  disabled={createRound.isPending}
-                  value={field.value ?? ""}
-                  onChange={(e) => field.onChange(e.target.value)}
-                  className={fieldInput}
-                />
-              )}
-            />
+        {watch("advancementType") === "LIMITED" ? (
+          <Field label={<>Candidates advancing <span className="text-error">*</span></>} error={errors.advancementCount?.message}>
+            <input type="number" min={1} placeholder="e.g. 10" disabled={createRound.isPending} {...register("advancementCount", { setValueAs: (value) => value === "" ? undefined : Number(value) })} className={fieldInput} />
           </Field>
-
-          <Field label="Ends At" error={errors.endsAt?.message} hint="Optional.">
-            <Controller
-              control={control}
-              name="endsAt"
-              render={({ field }) => (
-                <input
-                  type="datetime-local"
-                  disabled={createRound.isPending}
-                  value={field.value ?? ""}
-                  onChange={(e) => field.onChange(e.target.value)}
-                  className={fieldInput}
-                />
-              )}
-            />
-          </Field>
-        </div>
-
+        ) : null}
       </form>
     </Modal>
   );

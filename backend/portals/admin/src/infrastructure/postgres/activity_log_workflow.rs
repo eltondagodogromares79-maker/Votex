@@ -8,7 +8,9 @@ use uuid::Uuid;
 
 use crate::{
     application::ports::activity_log_workflow::ActivityLogWorkflow,
-    domain::activity_logs::{AuditLog, AuditLogFilter, TransactionLog, TransactionLogFilter},
+    domain::activity_logs::{
+        AuditLog, AuditLogFilter, NewAuditLog, TransactionLog, TransactionLogFilter,
+    },
 };
 
 pub struct PostgresActivityLogWorkflow {
@@ -129,12 +131,49 @@ const TRANSACTION_COLUMNS: &str = "log.id, log.transaction_type::text AS transac
     NULLIF(concat_ws(' ', actor.first_name, actor.last_name), '') AS actor_name, \
     log.reference_type, log.reference_id, log.status::text AS status, log.amount, \
     log.currency::text AS currency, log.metadata, log.request_id, log.created_at, log.completed_at";
-const TRANSACTION_FROM: &str = "FROM transaction_logs log \
+const TRANSACTION_FROM: &str = "FROM ( \
+    SELECT entry.id, entry.transaction_type::text AS transaction_type, entry.organization_id, \
+        entry.pageant_id, entry.actor_user_id, entry.reference_type, entry.reference_id, \
+        entry.status::text AS status, entry.amount, entry.currency::text AS currency, \
+        entry.metadata, entry.request_id, entry.created_at, entry.completed_at \
+    FROM transaction_logs entry \
+    UNION ALL \
+    SELECT payment.id, 'SUBSCRIPTION_PAYMENT'::text, payment.organization_id, \
+        NULL::uuid, NULL::uuid, 'ORGANIZATION_SUBSCRIPTION'::text, payment.subscription_id, \
+        payment.status::text, payment.amount, payment.currency::text, \
+        payment.metadata || jsonb_build_object('provider', payment.provider, 'provider_transaction_id', payment.provider_transaction_id), \
+        NULL::uuid, payment.created_at, payment.paid_at \
+    FROM payment_transactions payment \
+) log \
     LEFT JOIN organizations organization ON organization.id = log.organization_id \
     LEFT JOIN users actor ON actor.id = log.actor_user_id";
 
 #[async_trait]
 impl ActivityLogWorkflow for PostgresActivityLogWorkflow {
+    async fn create_audit_log(&self, entry: NewAuditLog) -> Result<(), AppError> {
+        sqlx::query(
+            "INSERT INTO audit_logs (organization_id, pageant_id, actor_user_id, action, \
+             resource_type, resource_id, after_data, request_id, ip_address, user_agent, \
+             success, failure_reason) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::inet, $10, $11, $12)",
+        )
+        .bind(entry.organization_id)
+        .bind(entry.pageant_id)
+        .bind(entry.actor_user_id)
+        .bind(entry.action)
+        .bind(entry.resource_type)
+        .bind(entry.resource_id)
+        .bind(entry.after_data)
+        .bind(entry.request_id)
+        .bind(entry.ip_address)
+        .bind(entry.user_agent)
+        .bind(entry.success)
+        .bind(entry.failure_reason)
+        .execute(&self.pool)
+        .await
+        .map_err(database_error)?;
+        Ok(())
+    }
+
     async fn list_audit_logs(&self, filter: AuditLogFilter) -> Result<Vec<AuditLog>, AppError> {
         let query = format!(
             "SELECT {AUDIT_COLUMNS} {AUDIT_FROM} \

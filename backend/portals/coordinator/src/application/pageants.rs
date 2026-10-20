@@ -5,7 +5,8 @@ use uuid::Uuid;
 
 use crate::{
     application::ports::pageant_workflow::PageantWorkflow,
-    contracts::pageants::UpdateAssignedPageantRequest, domain::pageant::AssignedPageant,
+    contracts::pageants::UpdateAssignedPageantRequest,
+    domain::pageant::{AssignedPageant, PageantResourceLimits},
 };
 
 pub struct CoordinatorPageantApplication {
@@ -29,7 +30,26 @@ impl CoordinatorPageantApplication {
         coordinator_id: Uuid,
         pageant_id: Uuid,
     ) -> Result<AssignedPageant, AppError> {
-        self.workflow.get_assigned(coordinator_id, pageant_id).await
+        let pageant = self
+            .workflow
+            .get_assigned(coordinator_id, pageant_id)
+            .await?;
+        if pageant.status == "DRAFT" {
+            return Err(AppError::Conflict(
+                "the coordinator dashboard is available after the pageant is published".to_owned(),
+            ));
+        }
+        Ok(pageant)
+    }
+
+    pub async fn get_resource_limits(
+        &self,
+        coordinator_id: Uuid,
+        pageant_id: Uuid,
+    ) -> Result<PageantResourceLimits, AppError> {
+        self.workflow
+            .get_resource_limits(coordinator_id, pageant_id)
+            .await
     }
 
     pub async fn update_assigned(

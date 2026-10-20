@@ -5,7 +5,9 @@ use uuid::Uuid;
 
 use crate::{
     application::ports::activity_log_workflow::ActivityLogWorkflow,
-    domain::activity_logs::{AuditLog, AuditLogFilter, TransactionLog, TransactionLogFilter},
+    domain::activity_logs::{
+        AuditLog, AuditLogFilter, NewAuditLog, TransactionLog, TransactionLogFilter,
+    },
 };
 
 pub struct ActivityLogApplication {
@@ -20,6 +22,10 @@ impl ActivityLogApplication {
     pub async fn list_audit_logs(&self, filter: AuditLogFilter) -> Result<Vec<AuditLog>, AppError> {
         validate_period(filter.from, filter.to)?;
         self.workflow.list_audit_logs(filter).await
+    }
+
+    pub async fn create_audit_log(&self, entry: NewAuditLog) -> Result<(), AppError> {
+        self.workflow.create_audit_log(entry).await
     }
 
     pub async fn get_audit_log(&self, id: Uuid) -> Result<AuditLog, AppError> {

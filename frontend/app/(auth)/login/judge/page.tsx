@@ -1,9 +1,5 @@
-import { SignInForm } from "@/src/features/auth/components/login/SignInForm";
-
-export const metadata = {
-  title: "Judge Sign In | Votex",
-};
+import { redirect } from "next/navigation";
 
 export default function JudgeLoginPage() {
-  return <SignInForm role="judge" />;
+  redirect("/login");
 }

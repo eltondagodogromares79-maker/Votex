@@ -9,14 +9,20 @@ use core_infra::{
 use crate::api::handler::{
     contestants::{
         create as create_contestant, deactivate as deactivate_contestant, get as get_contestant,
-        list as list_contestants, update as update_contestant,
+        get_placements as get_contestant_placements, list as list_contestants,
+        save_placements as save_contestant_placements, update as update_contestant,
     },
-    judges::{assign, assign_tabulators, list, list_tabulators, revoke, revoke_tabulators},
+    judges::{
+        activate, activate_tabulator, assign, assign_tabulators, delete_assignment,
+        delete_tabulator_assignment, list, list_tabulators, revoke, revoke_tabulators,
+    },
     pageant_setup::{
-        create_category, create_criterion, deactivate_category, deactivate_criterion, get_category,
-        get_criterion, list_categories, list_criteria, update_category, update_criterion,
+        activate_category, activate_criterion, create_category, create_criterion,
+        deactivate_category, deactivate_criterion, get_category, get_criterion, get_leaderboard,
+        get_round_configuration, list_categories, list_criteria, save_round_configuration,
+        update_category, update_category_status, update_criterion,
     },
-    pageants::{get_assigned, list_assigned, update_assigned},
+    pageants::{get_assigned, get_resource_limits, list_assigned, update_assigned},
     rounds::{
         create as create_round, delete as delete_round, get as get_round, list as list_rounds,
         update as update_round,
@@ -62,6 +68,24 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                         .wrap(AuthorizationGuard::pageant("judge.assign", "pageant_id")),
                 ),
             )
+            .route(
+                "/pageants/{pageant_id}/judges/{user_id}/activate",
+                web::post()
+                    .to(activate)
+                    .wrap(AuthorizationGuard::pageant("judge.assign", "pageant_id")),
+            )
+            .route(
+                "/pageants/{pageant_id}/judges/{user_id}/permanent",
+                web::delete()
+                    .to(delete_assignment)
+                    .wrap(AuthorizationGuard::pageant("judge.assign", "pageant_id")),
+            )
+            .route(
+                "/pageants/{pageant_id}/resource-limits",
+                web::get()
+                    .to(get_resource_limits)
+                    .wrap(AuthorizationGuard::pageant("pageant.read", "pageant_id")),
+            )
             .service(
                 web::resource("/pageants/{pageant_id}/tabulators")
                     .route(
@@ -90,6 +114,24 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                             "pageant_id",
                         )),
                 ),
+            )
+            .route(
+                "/pageants/{pageant_id}/tabulators/{user_id}/activate",
+                web::post()
+                    .to(activate_tabulator)
+                    .wrap(AuthorizationGuard::pageant(
+                        "tabulator.assign",
+                        "pageant_id",
+                    )),
+            )
+            .route(
+                "/pageants/{pageant_id}/tabulators/{user_id}/permanent",
+                web::delete()
+                    .to(delete_tabulator_assignment)
+                    .wrap(AuthorizationGuard::pageant(
+                        "tabulator.assign",
+                        "pageant_id",
+                    )),
             )
             .service(
                 web::resource("/pageants/{pageant_id}/contestants")
@@ -140,6 +182,17 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                     ),
             )
             .service(
+                web::resource("/pageants/{pageant_id}/contestants/{contestant_id}/placements")
+                    .route(
+                        web::get()
+                            .to(get_contestant_placements)
+                            .wrap(AuthorizationGuard::pageant("contestant.read", "pageant_id")),
+                    )
+                    .route(web::put().to(save_contestant_placements).wrap(
+                        AuthorizationGuard::pageant("contestant.update", "pageant_id"),
+                    )),
+            )
+            .service(
                 web::resource("/pageants/{pageant_id}/categories/{category_id}")
                     .route(
                         web::get()
@@ -155,7 +208,18 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                         web::delete()
                             .to(deactivate_category)
                             .wrap(AuthorizationGuard::pageant("criteria.manage", "pageant_id")),
+                    )
+                    .route(
+                        web::patch()
+                            .to(update_category_status)
+                            .wrap(AuthorizationGuard::pageant("criteria.manage", "pageant_id")),
                     ),
+            )
+            .route(
+                "/pageants/{pageant_id}/categories/{category_id}/activate",
+                web::post()
+                    .to(activate_category)
+                    .wrap(AuthorizationGuard::pageant("criteria.manage", "pageant_id")),
             )
             .service(
                 web::resource("/pageants/{pageant_id}/criteria")
@@ -188,6 +252,12 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                             .wrap(AuthorizationGuard::pageant("criteria.manage", "pageant_id")),
                     ),
             )
+            .route(
+                "/pageants/{pageant_id}/criteria/{criterion_id}/activate",
+                web::post()
+                    .to(activate_criterion)
+                    .wrap(AuthorizationGuard::pageant("criteria.manage", "pageant_id")),
+            )
             .service(
                 web::resource("/pageants/{pageant_id}/rounds")
                     .route(
@@ -218,6 +288,25 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                             .to(delete_round)
                             .wrap(AuthorizationGuard::pageant("round.manage", "pageant_id")),
                     ),
+            )
+            .service(
+                web::resource("/pageants/{pageant_id}/rounds/{round_id}/judging-configuration")
+                    .route(
+                        web::get()
+                            .to(get_round_configuration)
+                            .wrap(AuthorizationGuard::pageant("criteria.manage", "pageant_id")),
+                    )
+                    .route(
+                        web::put()
+                            .to(save_round_configuration)
+                            .wrap(AuthorizationGuard::pageant("criteria.manage", "pageant_id")),
+                    ),
+            )
+            .route(
+                "/pageants/{pageant_id}/rounds/{round_id}/leaderboard",
+                web::get()
+                    .to(get_leaderboard)
+                    .wrap(AuthorizationGuard::pageant("results.review", "pageant_id")),
             ),
     );
 }

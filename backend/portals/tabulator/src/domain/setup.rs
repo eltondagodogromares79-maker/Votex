@@ -4,10 +4,13 @@ use uuid::Uuid;
 pub struct Category {
     pub id: Uuid,
     pub pageant_id: Uuid,
+    pub round_id: Uuid,
     pub code: String,
     pub name: String,
     pub description: Option<String>,
     pub display_order: i32,
+    pub eligibility_scope: String,
+    pub status: String,
     pub is_active: bool,
 }
 #[derive(Debug, Clone, Serialize)]

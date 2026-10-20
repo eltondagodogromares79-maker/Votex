@@ -56,13 +56,13 @@ export default function FaqPage() {
       {/* ── Category filter ───────────────────────────────────────────── */}
       <section className="bg-surface py-5 border-b border-border sticky top-0 z-10">
         <div className="container-page">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <div className="flex flex-wrap items-center gap-2 pb-1">
             {CATEGORIES.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
                 className={cn(
-                  "shrink-0 px-4 py-1.5 text-caption font-medium transition-colors duration-150",
+                  "max-w-full px-3 py-1.5 text-caption font-medium leading-tight transition-colors duration-150 sm:px-4",
                   activeCategory === cat
                     ? "bg-navy text-white"
                     : "bg-slate text-muted hover:bg-navy hover:text-white",
@@ -90,7 +90,7 @@ export default function FaqPage() {
                   key={item.id}
                   className="bg-surface rounded-sm overflow-hidden"
                 >
-                  {/* Question button — navy header band style */}
+                  <h2 className="m-0">
                   <button
                     onClick={() => toggle(item.id)}
                     aria-expanded={isOpen}
@@ -127,19 +127,19 @@ export default function FaqPage() {
                       ▾
                     </span>
                   </button>
+                  </h2>
 
                   {/* Answer */}
-                  {isOpen && (
-                    <div
-                      id={`faq-${item.id}`}
-                      role="region"
-                      className="px-5 py-5 border-t border-border"
-                    >
-                      <p className="text-small text-muted leading-relaxed whitespace-pre-line">
-                        {item.answer}
-                      </p>
-                    </div>
-                  )}
+                  <div
+                    id={`faq-${item.id}`}
+                    role="region"
+                    aria-hidden={!isOpen}
+                    className={cn("px-5 py-5 border-t border-border", !isOpen && "hidden")}
+                  >
+                    <p className="text-small text-muted leading-relaxed whitespace-pre-line">
+                      {item.answer}
+                    </p>
+                  </div>
                 </div>
               );
             })}

@@ -3,13 +3,16 @@ import Link from "next/link";
 import Image from "next/image";
 import { ABOUT_CONTENT } from "@/src/content/about";
 import { Button } from "@/src/components/ui/Button";
+import { PublicDashboardLink } from "@/src/features/public/components/PublicDashboardLink";
 
 export const metadata: Metadata = {
-  title: "About",
-  description: "Learn about the Votex platform, our mission, and how it works.",
+  title: "About Our Pageant Platform",
+  description:
+    "Learn how VoteX supports pageant setup, judging, tabulation, and audience voting with role-based workspaces.",
+  alternates: { canonical: "/about" },
 };
 
-// Unsplash images — event / stage / teamwork themed
+// Event-themed stock photography. These are illustrative, not customer events.
 const IMG = {
   mission:    "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=900&q=80&auto=format&fit=crop",
   howItWorks: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=900&q=80&auto=format&fit=crop",
@@ -18,7 +21,7 @@ const IMG = {
 };
 
 export default function AboutPage() {
-  const { hero, mission, howItWorks, values, team } = ABOUT_CONTENT;
+  const { hero, mission, howItWorks, values, product } = ABOUT_CONTENT;
 
   return (
     <>
@@ -59,16 +62,11 @@ export default function AboutPage() {
               <p className="text-small text-muted leading-relaxed mb-8">
                 {mission.body}
               </p>
-              {/* Key points */}
               <div className="flex flex-col gap-3">
-                {[
-                  "From school-level to national events",
-                  "Precision results, zero spreadsheets",
-                  "Built by people who've run pageants",
-                ].map((pt) => (
-                  <div key={pt} className="flex items-start gap-3">
+                {mission.points.map((point) => (
+                  <div key={point} className="flex items-start gap-3">
                     <span className="text-gold shrink-0 mt-0.5" aria-hidden="true">✦</span>
-                    <p className="text-small text-charcoal">{pt}</p>
+                    <p className="text-small text-charcoal">{point}</p>
                   </div>
                 ))}
               </div>
@@ -81,6 +79,7 @@ export default function AboutPage() {
                 alt="Event venue"
                 fill
                 sizes="(max-width: 1024px) 100vw, 50vw"
+                quality={75}
                 className="object-cover object-center"
               />
               <div className="absolute inset-0 bg-navy/20" />
@@ -103,6 +102,7 @@ export default function AboutPage() {
                 alt="Judges at a pageant"
                 fill
                 sizes="(max-width: 1024px) 100vw, 50vw"
+                quality={75}
                 className="object-cover object-center"
               />
               <div className="absolute inset-0 bg-navy/25" />
@@ -130,9 +130,9 @@ export default function AboutPage() {
                       </span>
                     </div>
                     <div>
-                      <p className="font-serif font-semibold text-charcoal text-h3 mb-1">
+                      <h3 className="font-serif font-semibold text-charcoal text-h3 mb-1">
                         {step.title}
-                      </p>
+                      </h3>
                       <p className="text-small text-muted leading-relaxed">
                         {step.description}
                       </p>
@@ -155,6 +155,7 @@ export default function AboutPage() {
             alt=""
             fill
             sizes="100vw"
+            quality={75}
             className="object-cover object-center"
             aria-hidden="true"
           />
@@ -194,7 +195,7 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* ── Team — image left, bio right ──────────────────────────────── */}
+      {/* ── Product roles — image left, workspaces right ──────────────── */}
       <section className="py-20 bg-slate">
         <div className="container-page">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-stretch">
@@ -203,60 +204,42 @@ export default function AboutPage() {
             <div className="relative rounded-sm overflow-hidden min-h-[300px]">
               <Image
                 src={IMG.team}
-                alt="The Votex team"
+                alt="A stage prepared for an event"
                 fill
                 sizes="(max-width: 1024px) 100vw, 50vw"
+                quality={75}
                 className="object-cover object-center"
               />
               <div className="absolute inset-0 bg-navy/30" />
             </div>
 
-            {/* Right — team info */}
+            {/* Right — role workspaces */}
             <div className="flex flex-col justify-center">
               <p className="text-caption font-semibold uppercase tracking-[0.18em] text-gold mb-4">
-                The team
+                Built around event roles
               </p>
               <div className="w-6 h-px bg-gold/35 mb-6" />
               <h2 className="font-serif font-bold text-charcoal
                              text-[1.375rem] sm:text-[1.625rem] leading-tight mb-8">
-                Who we are
+                {product.heading}
               </h2>
-
-              {team.map((member) => (
-                <div key={member.name} className="flex flex-col gap-4">
-                  {/* Avatar + name row */}
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-full bg-navy flex items-center
-                                    justify-center shrink-0 border border-gold/20">
-                      <span className="font-serif font-bold text-gold text-h3">
-                        {member.name.charAt(0)}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="font-serif font-bold text-charcoal text-h3">
-                        {member.name}
-                      </p>
-                      <p className="text-caption text-gold/70">{member.role}</p>
-                    </div>
+              <p className="mb-6 text-small leading-relaxed text-muted">{product.body}</p>
+              <div className="flex flex-col divide-y divide-border border-y border-border">
+                {product.roles.map((role) => (
+                  <div key={role.title} className="py-4">
+                    <h3 className="font-serif text-h3 font-semibold text-charcoal">{role.title}</h3>
+                    <p className="mt-1 text-small leading-relaxed text-muted">{role.description}</p>
                   </div>
-
-                  <div className="w-full h-px bg-border" />
-
-                  <p className="text-small text-muted leading-relaxed">
-                    {member.bio}
-                  </p>
-
-                  {/* Social / contact hint */}
-                  <div className="flex items-center gap-2 mt-2">
-                    <Link href="/contact">
-                      <Button variant="ghost" size="sm"
-                        className="text-navy border-navy/20 hover:bg-navy hover:text-white">
-                        Get in touch
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              <div className="mt-6">
+                <Link href="/contact">
+                  <Button variant="ghost" size="sm"
+                    className="text-navy border-navy/20 hover:bg-navy hover:text-white">
+                    Contact us
+                  </Button>
+                </Link>
+              </div>
             </div>
 
           </div>
@@ -268,18 +251,16 @@ export default function AboutPage() {
         <div className="container-page">
           <div className="w-8 h-px bg-gold/35 mx-auto mb-8" />
           <h2 className="font-serif font-bold text-gold text-h1 mb-4">
-            Ready to run a flawless pageant?
+            Organize your pageant work in one place.
           </h2>
           <p className="text-small text-white/55 mb-8 max-w-md mx-auto leading-relaxed">
-            Join coordinators across the Philippines who trust Votex for
-            live scoring and real-time results.
+            Explore tools for pageant setup, judge scoring, tabulation, and
+            audience voting.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link href="/register">
-              <Button variant="secondary" size="md">Get started free</Button>
-            </Link>
+            <PublicDashboardLink href="/register" label="Get started" />
             <Link href="/contact">
-              <Button variant="ghost" size="md"
+              <Button variant="primary" size="md"
                 className="text-white/60 border-white/15 hover:bg-white/8 hover:text-white">
                 Contact us
               </Button>

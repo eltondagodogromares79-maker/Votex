@@ -10,9 +10,11 @@ import OrgPageShell from "@/src/features/org_owner/components/OrgPageShell";
 import OrgBadge from "@/src/features/org_owner/components/OrgBadge";
 import OrgEmptyState from "@/src/features/org_owner/components/OrgEmptyState";
 import { Button } from "@/src/components/ui/Button";
+import { CloudinaryImageUpload } from "@/src/components/ui/CloudinaryImageUpload";
 import { Modal } from "@/src/components/ui/Modal";
 import { useSession } from "@/src/features/auth/context/SessionContext";
-import { usePageants, useCreatePageant } from "@/src/features/org_owner/hooks/usePageants";
+import { usePageants, useCreatePageant, useRestorePageant } from "@/src/features/org_owner/hooks/usePageants";
+import { useSubscriptionUsage } from "@/src/features/org_owner/hooks/useSubscription";
 import { useToast } from "@/src/components/ui/Toast";
 import { ApiError } from "@/src/lib/api/client";
 import type { PageantResponse } from "@/src/types";
@@ -25,6 +27,7 @@ const addSchema = z.object({
     .min(3, "Slug must be at least 3 characters").max(100)
     .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]{1,2}$/, "Lowercase letters, numbers, hyphens only"),
   description: z.string().max(1000).optional().or(z.literal("")),
+  logoUrl: z.string().url("Upload a valid pageant image.").optional().or(z.literal("")),
   venue:       z.string().max(300).optional().or(z.literal("")),
   eventDate:   z.string().optional().or(z.literal("")),
   startTime:   z.string().optional().or(z.literal("")),
@@ -97,7 +100,13 @@ function Field({ label, error, hint, children }: {
 
 // ─── Pageant Card — matches public pageants page card style ──────────────────
 
-function PageantCard({ pageant }: { pageant: PageantResponse }) {
+function PageantCard({ pageant, onRestore, restoring, canRestore, restoreLimitMessage }: {
+  pageant: PageantResponse;
+  onRestore: (pageant: PageantResponse) => void;
+  restoring: boolean;
+  canRestore: boolean;
+  restoreLimitMessage: string;
+}) {
   return (
     <div className="bg-surface overflow-hidden flex flex-col hover:-translate-y-0.5 transition-transform duration-200">
 
@@ -183,16 +192,25 @@ function PageantCard({ pageant }: { pageant: PageantResponse }) {
             </svg>
             Dashboard
           </Link>
-          <Link
-            href={`/org_owner/pageants/${pageant.id}/settings`}
-            className="flex-1 h-9 flex items-center justify-center gap-1.5 bg-gold border border-border text-charcoal text-small font-medium hover:bg-slate hover:border-navy/30 transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            Settings
-          </Link>
+          {pageant.status.toLowerCase() === "archived" ? (
+            <button
+              onClick={() => onRestore(pageant)}
+              disabled={restoring || !canRestore}
+              title={!canRestore ? restoreLimitMessage : undefined}
+              className="flex-1 h-9 flex items-center justify-center gap-1.5 bg-success/10 border border-success/25 text-success text-small font-medium hover:bg-success/15 disabled:opacity-50 transition-colors"
+            >{restoring ? "Restoring…" : "Restore pageant"}</button>
+          ) : (
+            <Link
+              href={`/org_owner/pageants/${pageant.id}/settings`}
+              className="flex-1 h-9 flex items-center justify-center gap-1.5 bg-gold border border-border text-charcoal text-small font-medium hover:bg-slate hover:border-navy/30 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Settings
+            </Link>
+          )}
         </div>
       </div>
 
@@ -206,10 +224,12 @@ function CreatePageantForm({
   form,
   onNameChange,
   onSlugChange,
+  onUploadingChange,
 }: {
   form: ReturnType<typeof useForm<AddFormValues>>;
   onNameChange: (name: string) => void;
   onSlugChange: () => void;
+  onUploadingChange: (uploading: boolean) => void;
 }) {
   const { register, formState: { errors } } = form;
   return (
@@ -226,6 +246,16 @@ function CreatePageantForm({
       </div>
       <Field label="Description" error={errors.description?.message}>
         <textarea placeholder="Brief description of the pageant…" className={fieldTextarea} {...register("description")} />
+      </Field>
+      <Field label="Pageant image" hint="Optional · PNG, JPG, or WebP up to 10 MB">
+        <CloudinaryImageUpload
+          folder="pageant-images"
+          value={form.watch("logoUrl")}
+          label="Upload pageant image"
+          dark
+          onUploadingChange={onUploadingChange}
+          onChange={(url) => form.setValue("logoUrl", url, { shouldDirty: true, shouldValidate: true })}
+        />
       </Field>
       <Field label="Venue" error={errors.venue?.message}>
         <input type="text" placeholder="e.g. Smart Araneta Coliseum, Quezon City" className={fieldInput} {...register("venue")} />
@@ -259,17 +289,25 @@ export default function OrgOwnerPageantsPage() {
   const { toast } = useToast();
 
   const { data: pageants = [], isLoading, isError, refetch } = usePageants(orgId);
+  const { data: usage, isLoading: usageLoading } = useSubscriptionUsage(orgId);
   const createMutation = useCreatePageant(orgId);
+  const restoreMutation = useRestorePageant(orgId);
 
   const [search,       setSearch]       = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showCreate,   setShowCreate]   = useState(false);
   const [createError,  setCreateError]  = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
 
-  const form = useForm<AddFormValues>({ resolver: zodResolver(addSchema), defaultValues: { isPublic: false } });
+  const form = useForm<AddFormValues>({ resolver: zodResolver(addSchema), defaultValues: { isPublic: false, logoUrl: "" } });
   const [slugEdited, setSlugEdited] = useState(false);
+  const canCreatePageant = !usageLoading && !!usage?.planName && (usage.maxPageants === null || usage.pageantsUsed < usage.maxPageants);
+  const pageantLimitMessage = usageLoading
+    ? "Checking your subscription limits…"
+    : !usage?.planName
+      ? "An active subscription is required to create pageants."
+      : `You've used ${usage.pageantsUsed} of ${usage.maxPageants ?? "∞"} pageant slots.`;
 
-  function openCreate() { form.reset({ isPublic: false }); setSlugEdited(false); setCreateError(null); setShowCreate(true); }
   function closeCreate() { setShowCreate(false); form.reset(); setSlugEdited(false); setCreateError(null); }
 
   function handleNameChange(name: string) {
@@ -278,10 +316,15 @@ export default function OrgOwnerPageantsPage() {
 
   async function onCreate(data: AddFormValues) {
     setCreateError(null);
+    if (!canCreatePageant) {
+      setCreateError(pageantLimitMessage);
+      return;
+    }
     try {
       await createMutation.mutateAsync({
         name: data.name, slug: data.slug,
         description: data.description || null, venue: data.venue || null,
+        logoUrl: data.logoUrl || null,
         eventDate: data.eventDate || null, startTime: data.startTime || null,
         endTime: data.endTime || null, isPublic: data.isPublic,
       });
@@ -292,8 +335,31 @@ export default function OrgOwnerPageantsPage() {
     }
   }
 
+  async function onRestore(pageant: PageantResponse) {
+    if (!canCreatePageant) {
+      toast.error(pageantLimitMessage);
+      return;
+    }
+    try {
+      await restoreMutation.mutateAsync(pageant.id);
+      toast.success(`"${pageant.name}" restored.`);
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.userMessage : "Could not restore pageant.");
+    }
+  }
+
   const liveCount  = pageants.filter((p) => p.status === "live").length;
   const draftCount = pageants.filter((p) => p.status === "draft").length;
+  function openCreate() {
+    if (!canCreatePageant) {
+      toast.error(pageantLimitMessage);
+      return;
+    }
+    form.reset({ isPublic: false, logoUrl: "" });
+    setSlugEdited(false);
+    setCreateError(null);
+    setShowCreate(true);
+  }
 
   const filtered = pageants.filter((p) => {
     const q = search.toLowerCase();
@@ -308,11 +374,12 @@ export default function OrgOwnerPageantsPage() {
       title="Pageants"
       subtitle="Create and manage your organization's pageant events."
       breadcrumbs={[{ label: "Dashboard", href: "/org_owner/dashboard" }, { label: "Pageants" }]}
-      action={<Button variant="secondary" size="sm" onClick={openCreate}>+ New Pageant</Button>}
+      action={<Button variant="secondary" size="sm" onClick={openCreate} disabled={!canCreatePageant} title={!canCreatePageant ? pageantLimitMessage : undefined}>+ New Pageant</Button>}
     >
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <StatCard label="Pageants used"  value={usageLoading ? "—" : usage?.planName == null ? "No active plan" : `${usage.pageantsUsed} / ${usage.maxPageants ?? "∞"}`} sub={usage?.planName == null ? "Choose a plan to view limits" : usage.maxPageants == null ? "Unlimited pageants" : `${Math.max(0, usage.maxPageants - usage.pageantsUsed)} remaining`} />
         <StatCard label="Total"  value={isLoading ? "—" : pageants.length} sub="all pageants" />
         <StatCard label="Live"   value={isLoading ? "—" : liveCount}       sub="currently running" />
         <StatCard label="Draft"  value={isLoading ? "—" : draftCount}      sub="in preparation" />
@@ -359,12 +426,12 @@ export default function OrgOwnerPageantsPage() {
               icon={<PageantIcon />}
               heading={search || statusFilter !== "all" ? "No pageants match your filters" : "No pageants yet"}
               description={search || statusFilter !== "all" ? "Try adjusting your search or filter." : "Create your first pageant to get started."}
-              action={!search && statusFilter === "all" ? <Button variant="secondary" size="sm" onClick={openCreate}>+ New Pageant</Button> : undefined}
+              action={!search && statusFilter === "all" ? <Button variant="secondary" size="sm" onClick={openCreate} disabled={!canCreatePageant} title={!canCreatePageant ? pageantLimitMessage : undefined}>+ New Pageant</Button> : undefined}
             />
           ) : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {filtered.map((p) => <PageantCard key={p.id} pageant={p} />)}
+                {filtered.map((p) => <PageantCard key={p.id} pageant={p} onRestore={onRestore} restoring={restoreMutation.isPending} canRestore={canCreatePageant} restoreLimitMessage={pageantLimitMessage} />)}
               </div>
               <p className="text-caption text-muted mt-4">
                 Showing {filtered.length} of {pageants.length} pageant{pageants.length !== 1 ? "s" : ""}
@@ -379,14 +446,15 @@ export default function OrgOwnerPageantsPage() {
         description="Set up a new pageant event for your organization." size="lg"
         footer={
           <>
-            <Button variant="ghost" size="sm" onClick={closeCreate} disabled={form.formState.isSubmitting}>Cancel</Button>
-            <Button variant="secondary" size="sm" onClick={form.handleSubmit(onCreate)} loading={form.formState.isSubmitting}>
+            <Button variant="ghost" size="sm" onClick={closeCreate} disabled={form.formState.isSubmitting || imageUploading}>Cancel</Button>
+            <Button variant="secondary" size="sm" onClick={form.handleSubmit(onCreate)} loading={form.formState.isSubmitting} disabled={imageUploading || !canCreatePageant}>
               Create Pageant
             </Button>
           </>
         }
       >
-        <CreatePageantForm form={form} onNameChange={handleNameChange} onSlugChange={() => setSlugEdited(true)} />
+        {!canCreatePageant ? <div role="status" className="mb-4 border border-amber-300 bg-amber-50 px-4 py-3 text-small text-amber-900">{pageantLimitMessage}</div> : null}
+        <CreatePageantForm form={form} onNameChange={handleNameChange} onSlugChange={() => setSlugEdited(true)} onUploadingChange={setImageUploading} />
         {createError && (
           <div className="mt-4 flex items-start gap-3 bg-error/10 border border-error/25 px-4 py-3">
             <svg className="w-4 h-4 text-error shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">

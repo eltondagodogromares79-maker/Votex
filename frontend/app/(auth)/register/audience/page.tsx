@@ -12,10 +12,7 @@ import { ApiError } from "@/src/lib/api/client";
 import { audienceRegisterSchema, type AudienceRegisterFormValues } from "@/src/lib/validations/auth";
 import { EyeIcon } from "@/src/features/auth/components/register/AuthIcons";
 import { cn } from "@/src/lib/utils";
-import {
-  AuthLogoBrandPanel,
-  AuthLogoMobile,
-} from "@/src/features/auth/components/AuthLogo";
+import { AuthLogoBrandPanel } from "@/src/features/auth/components/AuthLogo";
 import { authApi } from "@/src/features/auth/api/authentication";
 import Spinner from "@/src/features/auth/components/apinner";
 
@@ -350,7 +347,7 @@ function AudienceRegisterInner() {
         "Account created! Please sign in to continue.",
       );
 
-      router.push("/login/audience");
+      router.push("/login");
     } catch (error) {
       if (error instanceof ApiError) {
         const code = error.code;
@@ -397,11 +394,6 @@ function AudienceRegisterInner() {
       <BrandPanel />
 
       <div className="flex-1 lg:w-7/12 xl:w-[55%] bg-navy flex flex-col">
-        {/* Mobile top bar */}
-        <div className="lg:hidden h-14 flex items-center px-6 border-b border-white/8">
-          <AuthLogoMobile />
-        </div>
-
         <div className="flex-1 flex items-center justify-center px-6 sm:px-10 md:px-16 lg:px-12 xl:px-16 py-10">
           <div className="w-full max-w-[420px]">
 
@@ -520,7 +512,7 @@ function AudienceRegisterInner() {
                 <p className="text-center text-small text-white/45 pt-1">
                   Already have an account?{" "}
                   <Link
-                    href="/login/audience"
+                    href="/login"
                     className="text-gold font-semibold hover:underline underline-offset-2"
                   >
                     Sign in

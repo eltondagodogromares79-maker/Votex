@@ -7,30 +7,57 @@ use core_infra::{
 };
 
 use crate::api::handler::{
+    activity_logs::list_activity_logs,
     coordinators::{
-        add_coordinator, get_coordinator, list_coordinators, remove_coordinator,
-        replace_coordinator, resend_coordinator_credentials, update_coordinator,
+        activate_coordinator, add_coordinator, deactivate_coordinator, get_coordinator,
+        list_coordinators, remove_coordinator, replace_coordinator, resend_coordinator_credentials,
+        update_coordinator,
     },
+    organizations::{get_organization, update_organization},
     pageant_staff::{
-        assign_judge, assign_pageant_coordinator, assign_tabulator, list_judges,
+        activate_judge, activate_pageant_coordinator, activate_tabulator, assign_judge,
+        assign_pageant_coordinator, assign_tabulator, delete_judge_assignment,
+        delete_pageant_coordinator_assignment, delete_tabulator_assignment, list_judges,
         list_pageant_coordinators, list_tabulator, revoke_judge, revoke_pageant_coordinator,
         revoke_tabulator,
     },
-    pageants::{archive_pageant, create_pageant, get_pageant, list_pageants, update_pageant},
+    pageants::{
+        archive_pageant, create_pageant, get_pageant, list_pageants, publish_pageant,
+        restore_pageant, update_pageant,
+    },
     subscriptions::{
-        cancel as cancel_subscription, current as current_subscription,
-        history as subscription_history, plans as subscription_plans, subscribe,
+        admin_cancel_subscription, admin_subscription_details, cancel as cancel_subscription,
+        create_subscription_checkout, current as current_subscription,
+        history as subscription_history, list_payment_proof_history, list_pending_payment_proofs,
+        organization_payment_proof_history, payment_mode as subscription_payment_mode,
+        pending_payment, plans as subscription_plans, review_payment_proof,
+        revoke_payment_approval, submit_payment_proof, subscribe, usage,
     },
     transactions::history as transaction_history,
-    vote_packages::{create, deactivate, list, update},
+    vote_packages::{activate, create, deactivate, list, update},
     vote_revenue::report as vote_revenue_report,
 };
 
 /// Register organization-owner routes with authentication and RBAC guards.
 pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn TokenAuthenticator>) {
+    let admin_token_validator = token_validator.clone();
     config.service(
         web::scope("/api/v1/organizations/{organization_id}")
             .wrap(JwtAuthentication::new(token_validator))
+            .service(
+                web::resource("")
+                    .route(
+                        web::get()
+                            .to(get_organization)
+                            .wrap(AuthorizationGuard::organization(
+                                "organization.read",
+                                "organization_id",
+                            )),
+                    )
+                    .route(web::put().to(update_organization).wrap(
+                        AuthorizationGuard::organization("organization.update", "organization_id"),
+                    )),
+            )
             .service(
                 web::resource("/subscription-plans")
                     .wrap(AuthorizationGuard::organization(
@@ -38,6 +65,22 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                         "organization_id",
                     ))
                     .route(web::get().to(subscription_plans)),
+            )
+            .service(
+                web::resource("/subscription-payment-mode")
+                    .wrap(AuthorizationGuard::organization(
+                        "billing.read",
+                        "organization_id",
+                    ))
+                    .route(web::get().to(subscription_payment_mode)),
+            )
+            .service(
+                web::resource("/activity-logs")
+                    .wrap(AuthorizationGuard::organization(
+                        "audit.read",
+                        "organization_id",
+                    ))
+                    .route(web::get().to(list_activity_logs)),
             )
             .service(
                 web::resource("/subscription")
@@ -48,6 +91,22 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                     .route(web::get().to(current_subscription)),
             )
             .service(
+                web::resource("/subscription/usage")
+                    .wrap(AuthorizationGuard::organization(
+                        "organization.read",
+                        "organization_id",
+                    ))
+                    .route(web::get().to(usage)),
+            )
+            .service(
+                web::resource("/payment-proofs/history")
+                    .wrap(AuthorizationGuard::organization(
+                        "billing.read",
+                        "organization_id",
+                    ))
+                    .route(web::get().to(organization_payment_proof_history)),
+            )
+            .service(
                 web::resource("/subscriptions")
                     .wrap(AuthorizationGuard::organization(
                         "billing.manage",
@@ -55,6 +114,30 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                     ))
                     .route(web::get().to(subscription_history))
                     .route(web::post().to(subscribe)),
+            )
+            .service(
+                web::resource("/subscriptions/pending-payment")
+                    .wrap(AuthorizationGuard::organization(
+                        "billing.read",
+                        "organization_id",
+                    ))
+                    .route(web::get().to(pending_payment)),
+            )
+            .service(
+                web::resource("/subscriptions/{subscription_id}/checkout")
+                    .wrap(AuthorizationGuard::organization(
+                        "billing.manage",
+                        "organization_id",
+                    ))
+                    .route(web::post().to(create_subscription_checkout)),
+            )
+            .service(
+                web::resource("/subscriptions/{subscription_id}/payment-proof")
+                    .wrap(AuthorizationGuard::organization(
+                        "billing.manage",
+                        "organization_id",
+                    ))
+                    .route(web::post().to(submit_payment_proof)),
             )
             .service(
                 web::resource("/subscriptions/{subscription_id}")
@@ -122,6 +205,22 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                     )),
             )
             .service(
+                web::resource("/pageants/{pageant_id}/restore")
+                    .wrap(AuthorizationGuard::organization(
+                        "pageant.update",
+                        "organization_id",
+                    ))
+                    .route(web::post().to(restore_pageant)),
+            )
+            .service(
+                web::resource("/pageants/{pageant_id}/publish")
+                    .wrap(AuthorizationGuard::organization(
+                        "pageant.update",
+                        "organization_id",
+                    ))
+                    .route(web::post().to(publish_pageant)),
+            )
+            .service(
                 web::resource("/coordinators")
                     .wrap(AuthorizationGuard::organization(
                         "role.assign",
@@ -140,6 +239,24 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                     .route(web::put().to(replace_coordinator))
                     .route(web::patch().to(update_coordinator))
                     .route(web::delete().to(remove_coordinator)),
+            )
+            .route(
+                "/coordinators/{user_id}/deactivate",
+                web::post()
+                    .to(deactivate_coordinator)
+                    .wrap(AuthorizationGuard::organization(
+                        "role.assign",
+                        "organization_id",
+                    )),
+            )
+            .route(
+                "/coordinators/{user_id}/activate",
+                web::post()
+                    .to(activate_coordinator)
+                    .wrap(AuthorizationGuard::organization(
+                        "role.assign",
+                        "organization_id",
+                    )),
             )
             .service(
                 web::resource("/coordinators/{user_id}/resend-credentials")
@@ -168,6 +285,14 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                     .route(web::delete().to(deactivate)),
             )
             .service(
+                web::resource("/pageants/{pageant_id}/vote-packages/{package_id}/activate")
+                    .wrap(AuthorizationGuard::organization(
+                        "voting.manage",
+                        "organization_id",
+                    ))
+                    .route(web::post().to(activate)),
+            )
+            .service(
                 web::resource("/pageants/{pageant_id}/coordinators")
                     .wrap(AuthorizationGuard::organization(
                         "role.assign",
@@ -183,6 +308,30 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                         "organization_id",
                     ))
                     .route(web::delete().to(revoke_pageant_coordinator)),
+            )
+            .route(
+                "/pageants/{pageant_id}/coordinators/{user_id}/deactivate",
+                web::post()
+                    .to(revoke_pageant_coordinator)
+                    .wrap(AuthorizationGuard::organization(
+                        "role.assign",
+                        "organization_id",
+                    )),
+            )
+            .route(
+                "/pageants/{pageant_id}/coordinators/{user_id}/activate",
+                web::post().to(activate_pageant_coordinator).wrap(
+                    AuthorizationGuard::organization("role.assign", "organization_id"),
+                ),
+            )
+            .route(
+                "/pageants/{pageant_id}/coordinators/{user_id}/permanent",
+                web::delete()
+                    .to(delete_pageant_coordinator_assignment)
+                    .wrap(AuthorizationGuard::organization(
+                        "role.assign",
+                        "organization_id",
+                    )),
             )
             .service(
                 web::resource("/pageants/{pageant_id}/judges")
@@ -201,6 +350,33 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                     ))
                     .route(web::delete().to(revoke_judge)),
             )
+            .route(
+                "/pageants/{pageant_id}/judges/{user_id}/deactivate",
+                web::post()
+                    .to(revoke_judge)
+                    .wrap(AuthorizationGuard::organization(
+                        "judge.assign",
+                        "organization_id",
+                    )),
+            )
+            .route(
+                "/pageants/{pageant_id}/judges/{user_id}/activate",
+                web::post()
+                    .to(activate_judge)
+                    .wrap(AuthorizationGuard::organization(
+                        "judge.assign",
+                        "organization_id",
+                    )),
+            )
+            .route(
+                "/pageants/{pageant_id}/judges/{user_id}/permanent",
+                web::delete()
+                    .to(delete_judge_assignment)
+                    .wrap(AuthorizationGuard::organization(
+                        "judge.assign",
+                        "organization_id",
+                    )),
+            )
             .service(
                 web::resource("/pageants/{pageant_id}/tabulators")
                     .wrap(AuthorizationGuard::organization(
@@ -217,6 +393,68 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                         "organization_id",
                     ))
                     .route(web::delete().to(revoke_tabulator)),
+            )
+            .route(
+                "/pageants/{pageant_id}/tabulators/{user_id}/deactivate",
+                web::post()
+                    .to(revoke_tabulator)
+                    .wrap(AuthorizationGuard::organization(
+                        "tabulator.assign",
+                        "organization_id",
+                    )),
+            )
+            .route(
+                "/pageants/{pageant_id}/tabulators/{user_id}/activate",
+                web::post()
+                    .to(activate_tabulator)
+                    .wrap(AuthorizationGuard::organization(
+                        "tabulator.assign",
+                        "organization_id",
+                    )),
+            )
+            .route(
+                "/pageants/{pageant_id}/tabulators/{user_id}/permanent",
+                web::delete().to(delete_tabulator_assignment).wrap(
+                    AuthorizationGuard::organization("tabulator.assign", "organization_id"),
+                ),
+            ),
+    );
+    config.service(
+        web::scope("/api/v1/admin/subscriptions")
+            .wrap(JwtAuthentication::new(admin_token_validator.clone()))
+            .service(
+                web::resource("/organizations/{organization_id}")
+                    .wrap(AuthorizationGuard::system("billing.manage"))
+                    .route(web::get().to(admin_subscription_details)),
+            )
+            .service(
+                web::resource("/{subscription_id}/cancel")
+                    .wrap(AuthorizationGuard::system("billing.manage"))
+                    .route(web::post().to(admin_cancel_subscription)),
+            ),
+    );
+    config.service(
+        web::scope("/api/v1/admin/subscription-payment-proofs")
+            .wrap(JwtAuthentication::new(admin_token_validator))
+            .service(
+                web::resource("")
+                    .wrap(AuthorizationGuard::system("billing.manage"))
+                    .route(web::get().to(list_pending_payment_proofs)),
+            )
+            .service(
+                web::resource("/history")
+                    .wrap(AuthorizationGuard::system("billing.manage"))
+                    .route(web::get().to(list_payment_proof_history)),
+            )
+            .service(
+                web::resource("/{proof_id}/review")
+                    .wrap(AuthorizationGuard::system("billing.manage"))
+                    .route(web::post().to(review_payment_proof)),
+            )
+            .service(
+                web::resource("/{proof_id}/revoke-approval")
+                    .wrap(AuthorizationGuard::system("billing.manage"))
+                    .route(web::post().to(revoke_payment_approval)),
             ),
     );
 }

@@ -1,4 +1,5 @@
 pub mod contestant_workflow;
+pub mod entitlements;
 pub mod judge_workflow;
 pub mod pageant_setup_workflow;
 pub mod pageant_workflow;

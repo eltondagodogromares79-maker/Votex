@@ -3,12 +3,10 @@
 /**
  * usePageantRealtime — single hook for all live views (scoring, tabulation, leaderboard).
  *
- * The Rust backend exposes a WebSocket actor per pageant at:
- *   ws(s)://<host>/api/v1/ws/pageants/{pageant_id}
+ * The Rust backend exposes an authenticated WebSocket stream per pageant.
  *
- * Each PageantEvent broadcast from the server uses the shape:
- *   { type: "<event_type>", data: { … } }
- * (Rust: #[serde(tag = "type", content = "data")])
+ * It obtains a short-lived, single-use ticket over the authenticated HTTP API;
+ * the access token is never placed in the WebSocket URL.
  *
  * Features:
  * - Automatic reconnect with exponential backoff (max 30s)
@@ -16,13 +14,10 @@
  * - Unsubscribes cleanly on unmount
  * - Event listener pattern — callers register typed handlers via onEvent
  *
- * Note: Backend WS auth is currently a TODO (user_id = Uuid::nil()).
- *       The hook sends the access token as a query param as a forward-compat
- *       measure. See TODO_BACKEND.md #1.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getAccessToken } from "@/src/lib/api/client";
+import { api } from "@/src/lib/api/client";
 import type { WsPageantEvent, WsConnectionState } from "@/src/types/realtime";
 
 const WS_BASE =
@@ -36,7 +31,7 @@ const BACKOFF_FACTOR = 2;
 type EventHandler = (event: WsPageantEvent) => void;
 
 interface UsePageantRealtimeOptions {
-  /** Called every time a PageantEvent arrives */
+  /** Called for each pageant invalidation event */
   onEvent?: EventHandler;
   /** Called on connection state change */
   onStateChange?: (state: WsConnectionState) => void;
@@ -77,51 +72,56 @@ export function usePageantRealtime(
 
   const connect = useCallback(() => {
     if (stoppedRef.current || !pageantId) return;
-
-    const token = getAccessToken();
-    const url = `${WS_BASE}/api/v1/ws/pageants/${pageantId}${token ? `?token=${encodeURIComponent(token)}` : ""}`;
-
     updateState("connecting");
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      retryDelayRef.current = INITIAL_RETRY_MS; // reset backoff on success
-      updateState("connected");
-    };
-
-    ws.onmessage = (evt) => {
+    void (async () => {
       try {
-        const event = JSON.parse(evt.data as string) as WsPageantEvent;
-        onEventRef.current?.(event);
+        const { data } = await api.post<{ ticket: string }>("/api/v1/realtime/ticket");
+        if (stoppedRef.current) return;
+        const url = `${WS_BASE}/api/v1/realtime/pageants?pageantId=${encodeURIComponent(pageantId)}&ticket=${encodeURIComponent(data.ticket)}`;
+        const ws = new WebSocket(url);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          retryDelayRef.current = INITIAL_RETRY_MS;
+          updateState("connected");
+        };
+
+        ws.onmessage = (evt) => {
+          try {
+            onEventRef.current?.(JSON.parse(evt.data as string) as WsPageantEvent);
+          } catch {
+            // Ignore malformed or unknown events and keep the stream alive.
+          }
+        };
+
+        ws.onclose = () => {
+          if (stoppedRef.current) {
+            updateState("disconnected");
+            return;
+          }
+          updateState("reconnecting");
+          retryTimeoutRef.current = setTimeout(() => {
+            retryDelayRef.current = Math.min(retryDelayRef.current * BACKOFF_FACTOR, MAX_RETRY_MS);
+            connect();
+          }, retryDelayRef.current);
+        };
+
+        ws.onerror = () => ws.close();
       } catch {
-        // malformed frame — ignore
+        if (stoppedRef.current) return;
+        updateState("reconnecting");
+        retryTimeoutRef.current = setTimeout(() => {
+          retryDelayRef.current = Math.min(retryDelayRef.current * BACKOFF_FACTOR, MAX_RETRY_MS);
+          connect();
+        }, retryDelayRef.current);
       }
-    };
-
-    ws.onclose = () => {
-      if (stoppedRef.current) {
-        updateState("disconnected");
-        return;
-      }
-      updateState("reconnecting");
-      retryTimeoutRef.current = setTimeout(() => {
-        retryDelayRef.current = Math.min(
-          retryDelayRef.current * BACKOFF_FACTOR,
-          MAX_RETRY_MS,
-        );
-        connect();
-      }, retryDelayRef.current);
-    };
-
-    ws.onerror = () => {
-      ws.close();
-    };
+    })();
   }, [pageantId, updateState]);
 
   const disconnect = useCallback(() => {
     stoppedRef.current = true;
     if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+    if (wsRef.current) wsRef.current.onclose = null;
     wsRef.current?.close();
     updateState("disconnected");
   }, [updateState]);
@@ -129,6 +129,7 @@ export function usePageantRealtime(
   const reconnect = useCallback(() => {
     stoppedRef.current = false;
     if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+    if (wsRef.current) wsRef.current.onclose = null;
     wsRef.current?.close();
     connect();
   }, [connect]);
@@ -141,6 +142,7 @@ export function usePageantRealtime(
     return () => {
       stoppedRef.current = true;
       if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+      if (wsRef.current) wsRef.current.onclose = null;
       wsRef.current?.close();
     };
   }, [enabled, connect]);

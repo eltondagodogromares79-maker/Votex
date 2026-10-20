@@ -63,6 +63,44 @@ impl PageantWorkflow for PostgresPageantWorkflow {
     async fn create_pageant(&self, pageant: Pageant) -> Result<Pageant, AppError> {
         let mut transaction = self.pool.begin().await.map_err(database_error)?;
 
+        let organization =
+            sqlx::query_scalar::<_, Uuid>("SELECT id FROM organizations WHERE id = $1 FOR UPDATE")
+                .bind(pageant.organization_id)
+                .fetch_optional(&mut *transaction)
+                .await
+                .map_err(database_error)?
+                .ok_or_else(|| AppError::NotFound("organization".to_owned()))?;
+        let max_pageants = sqlx::query_scalar::<_, Option<i32>>(
+            "SELECT plan.max_pageants FROM organization_subscriptions subscription \
+             INNER JOIN subscription_plans plan ON plan.id = subscription.plan_id \
+             WHERE subscription.organization_id = $1 \
+               AND subscription.status IN ('TRIALING','ACTIVE','PAST_DUE','PAUSED') \
+             ORDER BY subscription.created_at DESC, subscription.id DESC LIMIT 1",
+        )
+        .bind(organization)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(database_error)?
+        .ok_or_else(|| AppError::BadRequest(
+            "Your organization does not have an active subscription. Please subscribe to a plan before creating a pageant.".to_owned(),
+        ))?;
+        if let Some(max) = max_pageants {
+            let current_count = sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM pageants WHERE organization_id = $1 \
+                 AND (status <> 'ARCHIVED'::pageant_status OR configuration_started_at IS NOT NULL)",
+            )
+            .bind(organization)
+            .fetch_one(&mut *transaction)
+            .await
+            .map_err(database_error)?;
+            if current_count >= i64::from(max) {
+                return Err(AppError::BadRequest(format!(
+                    "Your current plan allows a maximum of {max} pageant{}. You have reached this limit. Please upgrade your plan to create more pageants.",
+                    if max == 1 { "" } else { "s" },
+                )));
+            }
+        }
+
         let inserted = sqlx::query(
             r#"
             INSERT INTO pageants (
@@ -154,6 +192,7 @@ impl PageantWorkflow for PostgresPageantWorkflow {
             .bind(pageant.event_date)
             .bind(pageant.start_time)
             .bind(pageant.end_time)
+            .bind(&pageant.venue)
             .bind(pageant.is_public)
             .fetch_optional(&self.pool)
             .await
@@ -162,47 +201,132 @@ impl PageantWorkflow for PostgresPageantWorkflow {
         Ok(row.into())
     }
 
+    async fn publish_pageant(
+        &self,
+        organization_id: Uuid,
+        pageant_id: Uuid,
+    ) -> Result<Pageant, AppError> {
+        let query = format!(
+            "UPDATE pageants SET status = 'PUBLISHED'::pageant_status \
+             WHERE organization_id = $1 AND id = $2 AND status = 'DRAFT'::pageant_status \
+             RETURNING {PAGEANT_COLUMNS}"
+        );
+        sqlx::query_as::<_, PageantRow>(&query)
+            .bind(organization_id)
+            .bind(pageant_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(database_error)?
+            .map(Pageant::from)
+            .ok_or_else(|| AppError::Conflict("pageant is no longer a draft".to_owned()))
+    }
+
     async fn archive_pageant(
         &self,
         organization_id: Uuid,
         pageant_id: Uuid,
     ) -> Result<(), AppError> {
-        let archived = sqlx::query_scalar::<_, Uuid>(
-            r#"
-            UPDATE pageants
-            SET status = 'ARCHIVED'::pageant_status
-            WHERE organization_id = $1 AND id = $2
-            RETURNING id
-            "#,
+        let mut transaction = self.pool.begin().await.map_err(database_error)?;
+        let configured_at = sqlx::query_scalar::<_, Option<chrono::DateTime<chrono::Utc>>>(
+            "SELECT configuration_started_at FROM pageants \
+             WHERE organization_id = $1 AND id = $2 FOR UPDATE",
         )
         .bind(organization_id)
         .bind(pageant_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await
-        .map_err(database_error)?;
-        if archived.is_some() {
-            return Ok(());
+        .map_err(database_error)?
+        .ok_or_else(|| AppError::NotFound("pageant".to_owned()))?;
+
+        if configured_at.is_some() {
+            return Err(AppError::Conflict(
+                "This pageant has already been configured and cannot be deleted. Its plan limit remains in use.".to_owned(),
+            ));
         }
 
-        let exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS (SELECT 1 FROM pageants WHERE organization_id = $1 AND id = $2)",
+        sqlx::query("UPDATE pageants SET status = 'ARCHIVED'::pageant_status WHERE id = $1")
+            .bind(pageant_id)
+            .execute(&mut *transaction)
+            .await
+            .map_err(database_error)?;
+        transaction.commit().await.map_err(database_error)
+    }
+
+    async fn restore_pageant(
+        &self,
+        organization_id: Uuid,
+        pageant_id: Uuid,
+    ) -> Result<(), AppError> {
+        let mut transaction = self.pool.begin().await.map_err(database_error)?;
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM organizations WHERE id = $1 FOR UPDATE")
+            .bind(organization_id)
+            .fetch_optional(&mut *transaction)
+            .await
+            .map_err(database_error)?
+            .ok_or_else(|| AppError::NotFound("organization".to_owned()))?;
+
+        let configuration_started_at = sqlx::query_scalar::<_, Option<chrono::DateTime<chrono::Utc>>>(
+            "SELECT configuration_started_at FROM pageants WHERE organization_id = $1 AND id = $2 AND status = 'ARCHIVED'::pageant_status FOR UPDATE",
         )
         .bind(organization_id)
         .bind(pageant_id)
-        .fetch_one(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await
-        .map_err(database_error)?;
-        if exists {
-            Ok(())
-        } else {
-            Err(AppError::NotFound("pageant".to_owned()))
+        .map_err(database_error)?
+        .ok_or_else(|| AppError::NotFound("archived pageant".to_owned()))?;
+
+        if configuration_started_at.is_some() {
+            return Err(AppError::Conflict(
+                "configured pageants cannot be restored after archival".to_owned(),
+            ));
         }
+
+        let max_pageants = sqlx::query_scalar::<_, Option<i32>>(
+            "SELECT plan.max_pageants FROM organization_subscriptions subscription \
+             INNER JOIN subscription_plans plan ON plan.id = subscription.plan_id \
+             WHERE subscription.organization_id = $1 \
+               AND subscription.status IN ('TRIALING','ACTIVE','PAST_DUE','PAUSED') \
+             ORDER BY subscription.created_at DESC, subscription.id DESC LIMIT 1",
+        )
+        .bind(organization_id)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(database_error)?
+        .ok_or_else(|| {
+            AppError::BadRequest(
+                "an active subscription is required to restore this pageant".to_owned(),
+            )
+        })?;
+
+        if let Some(limit) = max_pageants {
+            let used = sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM pageants WHERE organization_id = $1 AND (status <> 'ARCHIVED'::pageant_status OR configuration_started_at IS NOT NULL)",
+            )
+            .bind(organization_id)
+            .fetch_one(&mut *transaction)
+            .await
+            .map_err(database_error)?;
+            if used >= i64::from(limit) {
+                return Err(AppError::Conflict(format!(
+                    "restoring this pageant would exceed your plan limit of {limit}"
+                )));
+            }
+        }
+
+        sqlx::query("UPDATE pageants SET status = 'DRAFT'::pageant_status WHERE id = $1 AND organization_id = $2 AND status = 'ARCHIVED'::pageant_status")
+            .bind(pageant_id)
+            .bind(organization_id)
+            .execute(&mut *transaction)
+            .await
+            .map_err(database_error)?;
+        transaction.commit().await.map_err(database_error)
     }
 
     async fn count_active_pageants(&self, organization_id: Uuid) -> Result<i64, AppError> {
         sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM pageants \
-             WHERE organization_id = $1 AND status <> 'ARCHIVED'::pageant_status",
+             WHERE organization_id = $1 \
+               AND (status <> 'ARCHIVED'::pageant_status OR configuration_started_at IS NOT NULL)",
         )
         .bind(organization_id)
         .fetch_one(&self.pool)

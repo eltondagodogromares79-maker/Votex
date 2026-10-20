@@ -13,6 +13,8 @@ type CandidatesSectionProps = {
   pageantId: string;
 };
 
+const listActionClass = "inline-flex min-h-8 items-center justify-center rounded px-3 py-1.5 text-caption font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1";
+
 function CandidatesLoading() {
   return (
     <div className="mt-6 border border-border">
@@ -100,6 +102,10 @@ export default function CandidatesSection({
   }
 
   const candidateList = candidates ?? [];
+  const candidateGroups = [
+    { label: "Female", candidates: candidateList.filter((candidate) => candidate.gender?.toLowerCase() !== "male") },
+    { label: "Male", candidates: candidateList.filter((candidate) => candidate.gender?.toLowerCase() === "male") },
+  ];
 
   return (
     <>
@@ -161,152 +167,45 @@ export default function CandidatesSection({
             </button>
           </div>
         ) : (
-          /* Candidate table */
-          <div className="mt-5 border border-border overflow-hidden">
-            {/* Desktop header */}
-            <div className="hidden md:grid md:grid-cols-[80px_minmax(0,1fr)_120px_120px_100px] gap-4 px-5 py-3 bg-slate/30 border-b border-border">
-              <p className="text-caption font-semibold text-muted uppercase tracking-wide">
-                No.
-              </p>
-
-              <p className="text-caption font-semibold text-muted uppercase tracking-wide">
-                Candidate
-              </p>
-
-              <p className="text-caption font-semibold text-muted uppercase tracking-wide">
-                Gender
-              </p>
-
-              <p className="text-caption font-semibold text-muted uppercase tracking-wide">
-                Status
-              </p>
-
-              <p className="text-caption font-semibold text-muted uppercase tracking-wide text-right">
-                Actions
-              </p>
-            </div>
-
-            <div className="divide-y divide-border">
-              {candidateList.map((candidate) => (
-                <div
-                  key={candidate.id}
-                  className="px-5 py-4 transition-colors hover:bg-slate/10"
-                >
-                  {/* Desktop */}
-                  <div className="hidden md:grid md:grid-cols-[80px_minmax(0,1fr)_120px_120px_100px] gap-4 items-center">
-                    {/* Contestant number */}
-                    <div>
-                      <span className="text-small font-semibold text-navy">
-                        #{candidate.contestantNumber}
-                      </span>
-                    </div>
-
-                    {/* Candidate */}
-                    <div className="flex items-center gap-3 min-w-0">
-                      <CandidateAvatar
-                        photoUrl={candidate.photoUrl}
-                        displayName={candidate.displayName}
-                      />
-
-                      <div className="min-w-0">
-                        <p className="text-small font-semibold text-charcoal truncate">
-                          {candidate.displayName}
-                        </p>
-
-                        <p className="text-caption text-muted truncate">
-                          {candidate.firstName} {candidate.lastName}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Gender */}
-                    <div>
-                      <p className="text-small text-charcoal">
-                        {candidate.gender ?? "—"}
-                      </p>
-                    </div>
-
-                    {/* Status */}
-                    <div>
-                      <CandidateStatus isActive={candidate.isActive} />
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex justify-end gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setEditTarget(candidate)}
-                        className="text-caption font-semibold text-navy hover:underline"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeactivateTarget(candidate)}
-                        className="text-caption font-semibold text-red-600 hover:underline"
-                      >
-                        Deactivate
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Mobile */}
-                  <div className="md:hidden">
-                    <div className="flex items-start gap-3">
-                      <CandidateAvatar
-                        photoUrl={candidate.photoUrl}
-                        displayName={candidate.displayName}
-                      />
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-small font-semibold text-charcoal truncate">
-                              {candidate.displayName}
-                            </p>
-
-                            <p className="text-caption text-muted mt-0.5">
-                              Candidate #{candidate.contestantNumber}
-                            </p>
-                          </div>
-
-                          <CandidateStatus isActive={candidate.isActive} />
-                        </div>
-
-                        <div className="flex items-center gap-4 mt-3">
-                          <div>
-                            <p className="text-[11px] text-muted uppercase tracking-wide">
-                              Gender
-                            </p>
-
-                            <p className="text-caption text-charcoal mt-0.5">
-                              {candidate.gender ?? "—"}
-                            </p>
-                          </div>
-
-                          <div className="ml-auto flex items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setEditTarget(candidate)}
-                              className="text-caption font-semibold text-navy hover:underline"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeactivateTarget(candidate)}
-                              className="text-caption font-semibold text-red-600 hover:underline"
-                            >
-                              Deactivate
-                            </button>
+          <div className="mt-5 grid items-start gap-5 lg:grid-cols-2">
+            {candidateGroups.map((group) => (
+              <section key={group.label} className={`min-w-0 overflow-hidden border border-border bg-white ${group.label === "Female" ? "lg:order-1" : "lg:order-2"}`}>
+                <header className="flex items-center justify-between border-b border-border bg-slate/30 px-4 py-3 sm:px-5">
+                  <h5 className="font-serif text-lg font-semibold text-navy">{group.label}</h5>
+                  <span className="text-xs text-muted">{group.candidates.length} {group.candidates.length === 1 ? "candidate" : "candidates"}</span>
+                </header>
+                {group.candidates.length === 0 ? (
+                  <p className="px-5 py-8 text-center text-sm text-muted">No {group.label.toLowerCase()} candidates yet.</p>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {group.candidates.map((candidate) => (
+                      <article key={candidate.id} className="flex min-w-0 flex-col gap-4 p-4 transition-colors hover:bg-slate/10 sm:flex-row sm:items-center sm:p-5">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          <CandidateAvatar photoUrl={candidate.photoUrl} displayName={candidate.displayName} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="break-words text-sm font-semibold text-charcoal [overflow-wrap:anywhere]">{candidate.displayName}</p>
+                              <span className="shrink-0 bg-navy/5 px-2 py-0.5 text-xs font-semibold text-navy">#{candidate.contestantNumber}</span>
+                            </div>
+                            <p className="mt-0.5 break-words text-xs text-muted [overflow-wrap:anywhere]">{candidate.firstName} {candidate.middleName ? `${candidate.middleName} ` : ""}{candidate.lastName}</p>
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">Status</span>
+                              <CandidateRoundStatus status={candidate.currentRoundStatus} roundName={candidate.currentRoundName} />
+                              {!candidate.isActive ? <CandidateStatus isActive={false} /> : null}
+                            </div>
+                            {!candidate.currentRoundStatus ? <p className="mt-1 text-xs text-muted">Not entered in a round yet.</p> : null}
                           </div>
                         </div>
-                      </div>
-                    </div>
+                        <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+                          <button type="button" onClick={() => setEditTarget(candidate)} className={`${listActionClass} bg-navy text-white hover:bg-navy/90 focus-visible:ring-navy`}>Edit</button>
+                          <button type="button" onClick={() => setDeactivateTarget(candidate)} className={`${listActionClass} bg-error text-white hover:bg-error/90 focus-visible:ring-error`}>Deactivate</button>
+                        </div>
+                      </article>
+                    ))}
                   </div>
-                </div>
-              ))}
-            </div>
+                )}
+              </section>
+            ))}
           </div>
         )}
       </div>
@@ -380,4 +279,20 @@ function CandidateStatus({ isActive }: { isActive: boolean }) {
       {isActive ? "Active" : "Inactive"}
     </span>
   );
+}
+
+function CandidateRoundStatus({ status, roundName }: { status?: string | null; roundName?: string | null }) {
+  const normalized = status?.toUpperCase();
+  const styles: Record<string, string> = {
+    REGISTERED: "border border-slate-300 bg-slate-100 text-slate-800",
+    QUALIFIED: "border border-blue-300 bg-blue-100 text-blue-800",
+    ADVANCED: "border border-green-300 bg-green-100 text-green-800",
+    ELIMINATED: "border border-amber-300 bg-amber-100 text-amber-900",
+    DISQUALIFIED: "border border-red-300 bg-red-100 text-red-800",
+    WITHDRAWN: "border border-slate-300 bg-slate-100 text-slate-700",
+  };
+  const label = normalized?.toLowerCase().replaceAll("_", " ") ?? "registered";
+  return <span className={`inline-flex items-center border px-3 py-1.5 text-xs font-bold capitalize ${styles[normalized ?? "REGISTERED"]}`}>
+    {label}{roundName ? ` · ${roundName}` : ""}
+  </span>;
 }

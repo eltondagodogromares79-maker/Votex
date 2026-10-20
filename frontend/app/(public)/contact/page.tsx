@@ -3,34 +3,37 @@
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { FaFacebook, FaInstagram, FaWhatsapp, FaEnvelope } from "react-icons/fa";
+import { FaFacebook, FaInstagram, FaEnvelope } from "react-icons/fa";
 import { contactSchema, type ContactFormValues } from "@/src/lib/validations/billing";
 import { SITE_CONFIG } from "@/src/config/site";
 import { Input, Textarea } from "@/src/components/ui/Input";
 import { Button } from "@/src/components/ui/Button";
 import { useToast } from "@/src/components/ui/Toast";
 import { useState } from "react";
+import { useSession } from "@/src/features/auth/context/SessionContext";
+import { contactApi } from "@/src/features/contact/api/contact";
+import { ApiError } from "@/src/lib/api/client";
 
 export default function ContactPage() {
   const { toast } = useToast();
+  const { currentUser, isReady } = useSession();
   const [submitted, setSubmitted] = useState(false);
 
   const {
     register,
     handleSubmit,
-    reset,
     formState: { errors, isSubmitting },
   } = useForm<ContactFormValues>({ resolver: zodResolver(contactSchema) });
 
   async function onSubmit(data: ContactFormValues) {
+    if (!currentUser) return;
     try {
-      console.info("[Contact form submission]", data);
-      await new Promise((r) => setTimeout(r, 500));
+      await contactApi.submit(data);
       setSubmitted(true);
-      reset();
-      toast.success("Message sent! We'll get back to you soon.");
-    } catch {
-      toast.error("Failed to send. Please email us directly.");
+      toast.success("Your message was sent to the Votex support team.");
+    } catch (error) {
+      const message = error instanceof ApiError ? error.userMessage : "Please try again.";
+      toast.error(`Message could not be sent. ${message}`);
     }
   }
 
@@ -73,61 +76,27 @@ export default function ContactPage() {
                 <div className="w-6 h-px bg-gold/30" />
               </div>
 
-              {/* Email cards */}
-              <div className="flex flex-col gap-3">
-                {[
-                  {
-                    icon: <FaEnvelope size={16} />,
-                    label: "Support",
-                    value: SITE_CONFIG.contact.email,
-                    href: `mailto:${SITE_CONFIG.contact.email}`,
-                    note: "General inquiries & account support",
-                  },
-                  {
-                    icon: <FaEnvelope size={16} />,
-                    label: "Help",
-                    value: SITE_CONFIG.contact.helpEmail,
-                    href: `mailto:${SITE_CONFIG.contact.helpEmail}`,
-                    note: "Technical help & troubleshooting",
-                  },
-                ].map((ch) => (
-                  <a key={ch.label} href={ch.href}
-                    className="flex items-start gap-4 bg-surface px-5 py-4 rounded-sm
-                               hover:bg-navy group transition-colors duration-200">
-                    <span className="w-8 h-8 shrink-0 rounded-sm bg-navy/8
-                                     group-hover:bg-white/10 flex items-center justify-center
-                                     text-gold transition-colors mt-0.5">
-                      {ch.icon}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-caption font-semibold uppercase tracking-widest
-                                    text-gold/60 group-hover:text-gold/80 transition-colors mb-0.5">
-                        {ch.label}
-                      </p>
-                      <p className="text-small font-medium text-charcoal
-                                    group-hover:text-white transition-colors truncate">
-                        {ch.value}
-                      </p>
-                      <p className="text-caption text-muted group-hover:text-white/50
-                                    transition-colors mt-0.5">
-                        {ch.note}
-                      </p>
-                    </div>
-                  </a>
-                ))}
+              <div className="flex items-start gap-4 rounded-sm bg-surface px-5 py-4">
+                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-sm bg-navy/8 text-gold">
+                  <FaEnvelope size={16} />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-caption font-semibold uppercase tracking-widest text-gold/70">Support inbox</p>
+                  <p className="mt-1 text-small font-medium text-charcoal">Send a message through the form</p>
+                  <p className="mt-0.5 text-caption leading-relaxed text-muted">Your account details are attached and the request appears in the admin support inbox.</p>
+                </div>
               </div>
 
               {/* Social row */}
               <div>
                 <p className="text-caption font-semibold uppercase tracking-[0.16em]
                               text-muted mb-3">
-                  Follow &amp; message
+                  Follow Votex
                 </p>
                 <div className="flex items-center gap-3">
                   {[
                     { href: SITE_CONFIG.social.facebook, icon: <FaFacebook size={18} />, label: "Facebook" },
                     { href: SITE_CONFIG.social.instagram, icon: <FaInstagram size={18} />, label: "Instagram" },
-                    { href: SITE_CONFIG.social.whatsapp, icon: <FaWhatsapp size={18} />, label: "WhatsApp" },
                   ].map((s) => (
                     <a key={s.label}
                       href={s.href}
@@ -158,13 +127,25 @@ export default function ContactPage() {
               {/* Form header band */}
               <div className="bg-navy px-6 py-4 flex items-center gap-3">
                 <span className="text-gold text-caption" aria-hidden="true">✦</span>
-                <p className="font-serif font-semibold text-white text-h3">
+                <h2 className="font-serif font-semibold text-white text-h3">
                   Send us a message
-                </p>
+                </h2>
               </div>
 
               <div className="px-6 py-6">
-                {submitted ? (
+                {!isReady ? (
+                  <div className="py-12 text-center text-small text-muted" role="status">Checking your sign-in…</div>
+                ) : !currentUser ? (
+                  <div className="py-10 text-center">
+                    <h2 className="font-serif font-bold text-charcoal text-h2 mb-3">Sign in to contact us</h2>
+                    <p className="text-small text-muted mb-6 leading-relaxed max-w-md mx-auto">
+                      Contact messages are tied to your account so our admin team can reply to the right person.
+                    </p>
+                    <Link href={`/login?redirect=${encodeURIComponent("/contact")}`}>
+                      <Button variant="primary" size="md">Sign in to continue</Button>
+                    </Link>
+                  </div>
+                ) : submitted ? (
                   <div className="text-center py-12">
                     <p className="text-caption font-semibold uppercase tracking-[0.16em]
                                   text-gold mb-3">
@@ -182,15 +163,9 @@ export default function ContactPage() {
                   </div>
                 ) : (
                   <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <Input id="contact-name" label="Full name"
-                        placeholder="Juan dela Cruz"
-                        error={errors.name?.message} required
-                        {...register("name")} />
-                      <Input id="contact-email" type="email" label="Email address"
-                        placeholder="you@example.com"
-                        error={errors.email?.message} required
-                        {...register("email")} />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-sm border border-border bg-slate/40 p-4">
+                      <div className="min-w-0"><p className="text-caption font-semibold uppercase tracking-wider text-muted">Sending as</p><p className="mt-1 truncate text-small font-semibold text-charcoal">{`${currentUser.firstName} ${currentUser.lastName}`.trim()}</p></div>
+                      <div className="min-w-0"><p className="text-caption font-semibold uppercase tracking-wider text-muted">Reply email</p><p className="mt-1 truncate text-small font-semibold text-charcoal">{currentUser.email}</p></div>
                     </div>
                     <Input id="contact-subject" label="Subject"
                       placeholder="How can we help?"
@@ -228,7 +203,7 @@ export default function ContactPage() {
               <Button variant="secondary" size="md">View pricing</Button>
             </Link>
             <Link href="/faq">
-              <Button variant="ghost" size="md"
+              <Button variant="primary" size="md"
                 className="text-white/60 border-white/15 hover:bg-white/8 hover:text-white">
                 Read FAQ
               </Button>

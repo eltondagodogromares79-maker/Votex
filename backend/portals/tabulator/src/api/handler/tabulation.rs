@@ -2,7 +2,7 @@ use crate::{
     application::tabulation::TabulationApplication,
     contracts::tabulation::{
         AdvancementResponse, AssignedPageantResponse, CategoryResponse, ContestantResponse,
-        CriterionResponse, RoundResponse,
+        CriterionResponse, RoundResponse, RoundResultResponse,
     },
 };
 use actix_web::{HttpMessage, HttpRequest, HttpResponse, web};
@@ -99,6 +99,20 @@ pub async fn advancements(
         .await?
         .into_iter()
         .map(AdvancementResponse)
+        .collect::<Vec<_>>();
+    Ok(HttpResponse::Ok().json(data))
+}
+
+pub async fn leaderboard(
+    req: HttpRequest,
+    app: web::Data<TabulationApplication>,
+    path: web::Path<RoundPath>,
+) -> Result<HttpResponse, AppError> {
+    let data = app
+        .leaderboard(user_id(&req)?, path.pageant_id, path.round_id)
+        .await?
+        .into_iter()
+        .map(RoundResultResponse)
         .collect::<Vec<_>>();
     Ok(HttpResponse::Ok().json(data))
 }

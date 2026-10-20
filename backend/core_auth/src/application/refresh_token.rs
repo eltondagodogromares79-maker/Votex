@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
-use core_infra::AppError;
+use core_infra::{AppError, db::with_verified_database_user_context};
 
 use crate::{
     application::ports::{
-        refresh_token_workflow::RefreshTokenWorkflow,
-        token_issuer::TokenIssuer,
+        refresh_token_workflow::RefreshTokenWorkflow, token_issuer::TokenIssuer,
         user_role_workflow::UserRoleWorkflow,
     },
     contracts::login::RefreshTokenResponse,
@@ -43,10 +42,12 @@ impl RefreshTokenApplication {
         // 2. Re-resolve the user's current primary role from the database.
         //    Role can change between sessions (e.g. org_owner loses membership),
         //    so we always re-query rather than trusting the old token's rol claim.
-        let role = self
-            .user_role_workflow
-            .resolve_primary_role(session_result.user.id)
-            .await?;
+        let role = with_verified_database_user_context(
+            session_result.user.id,
+            self.user_role_workflow
+                .resolve_primary_role(session_result.user.id),
+        )
+        .await?;
 
         // 3. Issue a new access token with the current role embedded.
         let access_token = self

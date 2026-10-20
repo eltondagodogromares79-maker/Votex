@@ -4,7 +4,10 @@ use crate::{
         contestant::Contestant,
         pageant::AssignedPageant,
         round::Round,
-        setup::{Category, Criterion},
+        setup::{
+            Category, CategoryScoringWorkspace, CategorySubmissionResult, Criterion,
+            CriterionScoreInput, ScoreSubmissionResult,
+        },
     },
 };
 use core_infra::AppError;
@@ -30,5 +33,40 @@ impl JudgeApplication {
     }
     pub async fn criteria(&self, id: Uuid, pageant: Uuid) -> Result<Vec<Criterion>, AppError> {
         self.workflow.criteria(id, pageant).await
+    }
+    pub async fn category_scoring(
+        &self,
+        id: Uuid,
+        pageant: Uuid,
+        round: Uuid,
+        category: Uuid,
+    ) -> Result<CategoryScoringWorkspace, AppError> {
+        self.workflow
+            .category_scoring(id, pageant, round, category)
+            .await
+    }
+    pub async fn save_category_score_draft(
+        &self,
+        id: Uuid,
+        pageant: Uuid,
+        round: Uuid,
+        category: Uuid,
+        contestant: Uuid,
+        scores: Vec<CriterionScoreInput>,
+    ) -> Result<ScoreSubmissionResult, AppError> {
+        self.workflow
+            .save_category_score_draft(id, pageant, round, category, contestant, scores)
+            .await
+    }
+    pub async fn submit_category_scores(
+        &self,
+        id: Uuid,
+        pageant: Uuid,
+        round: Uuid,
+        category: Uuid,
+    ) -> Result<CategorySubmissionResult, AppError> {
+        self.workflow
+            .submit_category_scores(id, pageant, round, category)
+            .await
     }
 }

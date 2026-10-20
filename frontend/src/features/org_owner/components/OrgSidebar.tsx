@@ -5,6 +5,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useSession } from "@/src/features/auth/context/SessionContext";
+import { ROLE_HOME } from "@/src/config/permissions";
+import LogoutButton from "@/src/features/auth/components/LogoutButton";
 import {
   MdDashboard,
   MdChevronLeft,
@@ -21,6 +24,7 @@ import {
   MdSecurity,
   MdSupportAgent,
   MdEmojiEvents,
+  MdMarkEmailUnread,
 } from "react-icons/md";
 
 interface SidebarProps {
@@ -89,6 +93,21 @@ const navSections = [
     ],
   },
   {
+    title: "Activity",
+    items: [
+      {
+        name: "Activity Logs",
+        href: "/org_owner/activity-logs",
+        icon: MdHistory,
+      },
+      {
+        name: "Notifications",
+        href: "/notifications",
+        icon: MdMarkEmailUnread,
+      },
+    ],
+  },
+  {
     title: "Settings",
     items: [
       {
@@ -112,6 +131,8 @@ const navSections = [
 
 export default function Sidebar({ className = "" }: SidebarProps) {
   const pathname = usePathname();
+  const { currentUser } = useSession();
+  const notificationHref = currentUser ? `${ROLE_HOME[currentUser.role]}/notifications` : "/org_owner/notifications";
   const [collapsed, setCollapsed] = useState(false);
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -119,6 +140,7 @@ export default function Sidebar({ className = "" }: SidebarProps) {
     Events:   true,
     Teams:    true,
     Billing:  true,
+    Activity: true,
     Settings: true,
   });
 
@@ -133,7 +155,7 @@ export default function Sidebar({ className = "" }: SidebarProps) {
     <aside
       className={`
         sticky top-0 z-sidebar
-        flex h-screen flex-col
+        hidden h-screen shrink-0 flex-col lg:flex
         bg-navy text-white
         border-r border-white/10
         transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]
@@ -148,7 +170,7 @@ export default function Sidebar({ className = "" }: SidebarProps) {
           flex flex-col items-center justify-center
           border-b border-white/10
           transition-all duration-300
-          ${collapsed ? "h-[96px] gap-2 py-3" : "h-20"}
+          ${collapsed ? "h-[112px] gap-2 py-3" : "h-[112px]"}
         `}
       >
         <Link
@@ -162,17 +184,8 @@ export default function Sidebar({ className = "" }: SidebarProps) {
             width={100}
             height={100}
             priority
-            className={`
-              object-contain transition-all duration-300
-              ${collapsed ? "h-8 w-8" : "h-9 w-9"}
-            `}
+            className={`h-auto w-auto transition-all duration-300 ${collapsed ? "max-w-14" : ""}`}
           />
-
-          {!collapsed && (
-            <span className="mt-1.5 font-serif font-bold tracking-[0.18em] text-gold text-[12.5px] leading-none">
-              {SITE_CONFIG.name.toUpperCase()}
-            </span>
-          )}
 
           {collapsed && (
             <span
@@ -213,6 +226,25 @@ export default function Sidebar({ className = "" }: SidebarProps) {
           )}
         </button>
       </div>
+
+      {currentUser && !currentUser.emailVerifiedAt && (
+        <div className={`shrink-0 px-2.5 pt-3 ${collapsed ? "flex justify-center" : "px-3"}`}>
+          <Link
+            href="/org_owner/settings/accounts#email-verification"
+            title={collapsed ? "Verify your email" : undefined}
+            className={`flex items-center gap-2 border border-gold/30 bg-gold/10 text-gold hover:bg-gold/15 transition-colors ${
+              collapsed ? "h-10 w-10 justify-center" : "px-3 py-2.5"
+            }`}
+          >
+            <MdMarkEmailUnread className="h-4 w-4 shrink-0" />
+            {!collapsed && (
+              <span className="text-caption font-semibold leading-snug">
+                Verify your email
+              </span>
+            )}
+          </Link>
+        </div>
+      )}
 
       {/* ── Navigation ────────────────────────────────────────────── */}
       <nav
@@ -266,14 +298,19 @@ export default function Sidebar({ className = "" }: SidebarProps) {
                   <ul className="space-y-0.5">
                     {section.items.map((item) => {
                       const Icon = item.icon;
+                      const href = item.href === "/notifications"
+                        ? notificationHref
+                        : item.href === "/org_owner/settings/security" && currentUser?.role === "tabulator"
+                          ? "/tabulator/account/security"
+                          : item.href;
                       const isActive =
-                        pathname === item.href ||
-                        pathname.startsWith(`${item.href}/`);
+                        pathname === href ||
+                        pathname.startsWith(`${href}/`);
 
                       return (
                         <li key={item.name}>
                           <Link
-                            href={item.href}
+                            href={href}
                             className={`
                               group relative
                               flex h-10.5 items-center
@@ -338,6 +375,17 @@ export default function Sidebar({ className = "" }: SidebarProps) {
           })}
         </div>
       </nav>
+
+      <div className={`shrink-0 border-t border-white/10 px-2.5 py-3 ${collapsed ? "flex justify-center" : ""}`}>
+        {currentUser?.role === "tabulator" ? <Link href="/account/delete" className={`mb-2 inline-flex h-9 items-center text-white/55 transition-colors hover:bg-white/5 hover:text-gold ${collapsed ? "w-10 justify-center" : "w-full gap-3 px-3 text-[13px] font-medium"}`} title={collapsed ? "Account" : undefined}>
+          <MdAccountCircle className="h-[18px] w-[18px] shrink-0" />{!collapsed ? "Account" : null}
+        </Link> : null}
+        <LogoutButton
+          loginPath="/login"
+          iconOnly={collapsed}
+          className={`group inline-flex h-10 items-center rounded-md text-red-400/80 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:cursor-wait disabled:opacity-50 ${collapsed ? "w-10 justify-center" : "w-full gap-3 px-3 text-[13.5px] font-medium"}`}
+        />
+      </div>
 
       {/* ── Footer ────────────────────────────────────────────────── */}
       {!collapsed && (

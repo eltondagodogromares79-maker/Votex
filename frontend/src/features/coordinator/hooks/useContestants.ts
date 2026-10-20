@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { coordinatorApi } from "../api/coordinator";
-import type { AddCandidateRequest } from "@/src/types";
+import type { AddCandidateRequest, CandidatePlacements } from "@/src/types";
 
 const key = (pageantId: string) => ["coordinator", "pageants", pageantId, "contestants"] as const;
 
@@ -42,4 +42,19 @@ export function useDeactivateContestant(pageantId: string) {
     mutationFn: (contestantId: string) => coordinatorApi.deactivateContestant(pageantId, contestantId),
     onSuccess: () => qc.invalidateQueries({ queryKey: key(pageantId) }),
   });
+}
+
+export function useCandidatePlacements(pageantId: string, contestantId: string) {
+  const qc = useQueryClient();
+  const queryKey = ["coordinator", "pageants", pageantId, "contestants", contestantId, "placements"] as const;
+  const query = useQuery({
+    queryKey,
+    queryFn: () => coordinatorApi.getContestantPlacements(pageantId, contestantId),
+    enabled: !!pageantId && !!contestantId,
+  });
+  const mutation = useMutation({
+    mutationFn: (data: CandidatePlacements) => coordinatorApi.saveContestantPlacements(pageantId, contestantId, data),
+    onSuccess: (data) => qc.setQueryData(queryKey, data),
+  });
+  return { ...query, save: mutation };
 }

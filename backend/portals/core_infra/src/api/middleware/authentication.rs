@@ -1,5 +1,6 @@
 use crate::{
-    application::ports::security::TokenAuthenticator, domain::security::AuthenticatedUser,
+    application::ports::security::TokenAuthenticator, db::with_request_database_context,
+    domain::security::AuthenticatedUser,
 };
 use actix_web::{
     Error, HttpMessage,
@@ -72,8 +73,8 @@ where
                 .authenticate(token)
                 .await
                 .map_err(|_| ErrorUnauthorized("Unauthorized"))?;
-            req.extensions_mut().insert(user);
-            service.call(req).await
+            req.extensions_mut().insert(user.clone());
+            with_request_database_context(Some(user), async move { service.call(req).await }).await
         })
     }
 }

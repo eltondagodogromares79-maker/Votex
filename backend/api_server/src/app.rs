@@ -7,7 +7,7 @@ use audience::application::voting::VotingApplication;
 use core_infra::application::ports::security::TokenAuthenticator;
 use core_infra::{
     AppError, application::ports::payment_provider::PaymentProvider,
-    domain::payments::CheckoutWebhookEvent,
+    db::with_system_database_context, domain::payments::CheckoutWebhookEvent,
 };
 use org_owner::application::subscriptions::SubscriptionApplication;
 
@@ -38,17 +38,29 @@ async fn paymongo_webhook(
     }
     let payload: serde_json::Value = serde_json::from_slice(&body)
         .map_err(|_| AppError::BadRequest("invalid PayMongo webhook payload".into()))?;
-    let payment_id = payload["data"]["data"]["attributes"]["payments"][0]["id"]
-        .as_str()
-        .or_else(|| {
-            payload["data"]["attributes"]["data"]["attributes"]["payments"][0]["id"].as_str()
-        });
-    subscriptions
-        .confirm_checkout(&event.checkout_session_id, payment_id)
-        .await?;
-    voting
-        .confirm_checkout(&event.checkout_session_id, payment_id)
-        .await?;
+    let payments = payload["data"]["attributes"]["data"]["attributes"]["payments"]
+        .as_array()
+        .or_else(|| payload["data"]["data"]["attributes"]["payments"].as_array());
+    let payment_id = payments.and_then(|payments| {
+        payments
+            .iter()
+            .find(|payment| {
+                payment["attributes"]["status"].as_str() == Some("paid")
+                    || payment["status"].as_str() == Some("paid")
+            })
+            .or_else(|| payments.first())
+            .and_then(|payment| payment["id"].as_str())
+    });
+    with_system_database_context(async {
+        subscriptions
+            .confirm_checkout(&event.checkout_session_id, payment_id)
+            .await?;
+        voting
+            .confirm_checkout(&event.checkout_session_id, payment_id)
+            .await?;
+        Ok::<(), AppError>(())
+    })
+    .await?;
     Ok(HttpResponse::Ok().finish())
 }
 

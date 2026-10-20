@@ -5,7 +5,8 @@ use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
 use crate::{
-    application::ports::contestant_workflow::ContestantWorkflow, domain::contestant::Contestant,
+    application::ports::contestant_workflow::ContestantWorkflow,
+    domain::contestant::{Contestant, ContestantPlacements},
 };
 
 pub struct PostgresContestantWorkflow {
@@ -32,6 +33,8 @@ struct ContestantRow {
     photo_url: Option<String>,
     biography: Option<String>,
     is_active: bool,
+    current_round_status: Option<String>,
+    current_round_name: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -51,6 +54,8 @@ impl From<ContestantRow> for Contestant {
             photo_url: row.photo_url,
             biography: row.biography,
             is_active: row.is_active,
+            current_round_status: row.current_round_status,
+            current_round_name: row.current_round_name,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }
@@ -60,7 +65,16 @@ impl From<ContestantRow> for Contestant {
 const CONTESTANT_COLUMNS: &str = "contestant.id, contestant.pageant_id, contestant.user_id, \
     contestant.contestant_number, contestant.first_name, contestant.middle_name, \
     contestant.last_name, contestant.display_name, contestant.gender, contestant.photo_url, \
-    contestant.biography, contestant.is_active, contestant.created_at, contestant.updated_at";
+    contestant.biography, contestant.is_active, \
+    (SELECT candidate_round.status::TEXT FROM candidate_rounds candidate_round \
+     INNER JOIN pageant_rounds round ON round.id = candidate_round.round_id \
+     WHERE candidate_round.contestant_id = contestant.id \
+     ORDER BY round.round_number DESC LIMIT 1) AS current_round_status, \
+    (SELECT round.name FROM candidate_rounds candidate_round \
+     INNER JOIN pageant_rounds round ON round.id = candidate_round.round_id \
+     WHERE candidate_round.contestant_id = contestant.id \
+     ORDER BY round.round_number DESC LIMIT 1) AS current_round_name, \
+    contestant.created_at, contestant.updated_at";
 
 #[async_trait]
 impl ContestantWorkflow for PostgresContestantWorkflow {
@@ -231,6 +245,113 @@ impl ContestantWorkflow for PostgresContestantWorkflow {
             .map(|_| ())
             .ok_or_else(|| AppError::NotFound("active contestant".to_owned()))
     }
+
+    async fn get_placements(
+        &self,
+        coordinator_id: Uuid,
+        pageant_id: Uuid,
+        contestant_id: Uuid,
+    ) -> Result<ContestantPlacements, AppError> {
+        ensure_coordinator_assignment(&self.pool, coordinator_id, pageant_id).await?;
+        let exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM contestants WHERE id=$1 AND pageant_id=$2)",
+        )
+        .bind(contestant_id)
+        .bind(pageant_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(database_error)?;
+        if !exists {
+            return Err(AppError::NotFound("contestant".to_owned()));
+        }
+        let category_ids = sqlx::query_scalar::<_, Uuid>("SELECT category_id FROM contestant_categories WHERE contestant_id=$1 ORDER BY category_id")
+            .bind(contestant_id).fetch_all(&self.pool).await.map_err(database_error)?;
+        let round_ids = sqlx::query_scalar::<_, Uuid>(
+            "SELECT round_id FROM candidate_rounds WHERE contestant_id=$1 ORDER BY round_id",
+        )
+        .bind(contestant_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(database_error)?;
+        Ok(ContestantPlacements {
+            category_ids,
+            round_ids,
+        })
+    }
+
+    async fn save_placements(
+        &self,
+        coordinator_id: Uuid,
+        pageant_id: Uuid,
+        contestant_id: Uuid,
+        placements: ContestantPlacements,
+    ) -> Result<ContestantPlacements, AppError> {
+        ensure_coordinator_assignment(&self.pool, coordinator_id, pageant_id).await?;
+        let mut tx = self.pool.begin().await.map_err(database_error)?;
+        let exists = sqlx::query_scalar::<_, bool>("SELECT EXISTS (SELECT 1 FROM contestants WHERE id=$1 AND pageant_id=$2 AND is_active=TRUE)")
+            .bind(contestant_id).bind(pageant_id).fetch_one(&mut *tx).await.map_err(database_error)?;
+        if !exists {
+            return Err(AppError::NotFound("active contestant".to_owned()));
+        }
+        for id in &placements.category_ids {
+            let valid = sqlx::query_scalar::<_, bool>("SELECT EXISTS (SELECT 1 FROM pageant_categories WHERE id=$1 AND pageant_id=$2 AND is_active=TRUE)")
+                .bind(id).bind(pageant_id).fetch_one(&mut *tx).await.map_err(database_error)?;
+            if !valid {
+                return Err(AppError::BadRequest(
+                    "a selected category is inactive or belongs to another pageant".to_owned(),
+                ));
+            }
+        }
+        for id in &placements.round_ids {
+            let valid = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS (SELECT 1 FROM pageant_rounds WHERE id=$1 AND pageant_id=$2)",
+            )
+            .bind(id)
+            .bind(pageant_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(database_error)?;
+            if !valid {
+                return Err(AppError::BadRequest(
+                    "a selected round belongs to another pageant or does not exist".to_owned(),
+                ));
+            }
+            let category_match = sqlx::query_scalar::<_, bool>(
+                "SELECT NOT EXISTS (SELECT 1 FROM pageant_round_categories WHERE round_id=$1) OR EXISTS (SELECT 1 FROM pageant_round_categories WHERE round_id=$1 AND category_id = ANY($2))",
+            ).bind(id).bind(&placements.category_ids).fetch_one(&mut *tx).await.map_err(database_error)?;
+            if !category_match {
+                return Err(AppError::BadRequest("assign the candidate to at least one category configured for each selected round".to_owned()));
+            }
+        }
+
+        let has_locked_round = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM candidate_rounds cr WHERE cr.contestant_id=$1 AND NOT (cr.round_id = ANY($2)) AND (cr.status <> 'REGISTERED'::candidate_round_status OR EXISTS (SELECT 1 FROM score_sheets ss JOIN judge_assignments ja ON ja.id = ss.judge_assignment_id WHERE ss.contestant_id=$1 AND ja.round_id=cr.round_id) OR EXISTS (SELECT 1 FROM advancement_decisions ad WHERE ad.contestant_id=$1 AND (ad.from_round_id=cr.round_id OR ad.to_round_id=cr.round_id))))",
+        ).bind(contestant_id).bind(&placements.round_ids).fetch_one(&mut *tx).await.map_err(database_error)?;
+        if has_locked_round {
+            return Err(AppError::Conflict("a candidate cannot be removed from a round after advancement or scoring has started".to_owned()));
+        }
+
+        sqlx::query("DELETE FROM contestant_categories WHERE contestant_id=$1 AND NOT (category_id = ANY($2))")
+            .bind(contestant_id).bind(&placements.category_ids).execute(&mut *tx).await.map_err(database_error)?;
+        sqlx::query(
+            "DELETE FROM candidate_rounds WHERE contestant_id=$1 AND NOT (round_id = ANY($2))",
+        )
+        .bind(contestant_id)
+        .bind(&placements.round_ids)
+        .execute(&mut *tx)
+        .await
+        .map_err(database_error)?;
+        for id in &placements.category_ids {
+            sqlx::query("INSERT INTO contestant_categories (contestant_id, category_id) VALUES ($1,$2) ON CONFLICT (contestant_id,category_id) DO NOTHING")
+                .bind(contestant_id).bind(id).execute(&mut *tx).await.map_err(database_error)?;
+        }
+        for id in &placements.round_ids {
+            sqlx::query("INSERT INTO candidate_rounds (contestant_id, round_id) VALUES ($1,$2) ON CONFLICT (contestant_id,round_id) DO NOTHING")
+                .bind(contestant_id).bind(id).execute(&mut *tx).await.map_err(database_error)?;
+        }
+        tx.commit().await.map_err(database_error)?;
+        Ok(placements)
+    }
 }
 
 async fn ensure_coordinator_assignment(
@@ -285,10 +406,10 @@ fn map_contestant_write_error(error: sqlx::Error) -> AppError {
         if database_error.code().as_deref() == Some("23505") {
             if database_error
                 .constraint()
-                .is_some_and(|name| name == "contestants_pageant_id_contestant_number_key")
+                .is_some_and(|name| name == "uq_contestants_pageant_number_gender")
             {
                 return AppError::Conflict(
-                    "this contestant number is already used in the pageant".to_owned(),
+                    "this contestant number is already used by another candidate of the same gender".to_owned(),
                 );
             }
             if database_error

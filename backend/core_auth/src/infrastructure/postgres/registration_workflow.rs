@@ -136,6 +136,18 @@ impl RegistrationWorkflow for PostgresRegistrationWorkflow {
         .await
         .map_err(map_database_error)?;
 
+        // Registration is unauthenticated, but this transaction is creating
+        // the account whose voter row is about to be inserted. Scope that
+        // identity to this transaction so RLS can verify ownership without
+        // carrying it into another pooled request.
+        sqlx::query(
+            "SELECT set_config('votex.user_id', $1, true), set_config('votex.user_role', 'AUDIENCE', true), set_config('votex.is_system', 'false', true)",
+        )
+        .bind(user.id.to_string())
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_database_error)?;
+
         // ------------------------------------------------------------
         // Create audience voter.
         // ------------------------------------------------------------
@@ -305,6 +317,17 @@ impl RegistrationWorkflow for PostgresRegistrationWorkflow {
         .bind(user.locked_until)
         .bind(user.created_at)
         .bind(user.updated_at)
+        .execute(&mut *transaction)
+        .await
+        .map_err(map_database_error)?;
+
+        // The account is not logged in yet, so establish the newly-created
+        // owner's identity only for this registration transaction. RLS uses
+        // it to authorize creation of that owner's organization and member.
+        sqlx::query(
+            "SELECT set_config('votex.user_id', $1, true), set_config('votex.user_role', 'ORG_OWNER', true), set_config('votex.is_system', 'false', true)",
+        )
+        .bind(user.id.to_string())
         .execute(&mut *transaction)
         .await
         .map_err(map_database_error)?;

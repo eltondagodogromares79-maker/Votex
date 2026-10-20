@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import LogoutButton from "@/src/features/auth/components/LogoutButton";
 import {
   MdDashboard,
   MdChevronLeft,
@@ -14,8 +15,8 @@ import {
   MdBusiness,
   MdPeople,
   MdEmojiEvents,
-  MdPayments,
   MdCardMembership,
+  MdReceiptLong,
   MdPriceCheck,
   MdFlag,
   MdManageSearch,
@@ -24,6 +25,8 @@ import {
   MdPerson,
   MdSecurity,
   MdLogout,
+  MdNotifications,
+  MdContactSupport,
 } from "react-icons/md";
 
 interface SidebarProps {
@@ -48,8 +51,8 @@ const navSections = [
   {
     title: "Finance",
     items: [
-      { name: "Payments",      href: "/admin/finance/payments",      icon: MdPayments       },
       { name: "Subscriptions", href: "/admin/finance/subscriptions", icon: MdCardMembership },
+      { name: "Transactions",  href: "/admin/finance/payments",       icon: MdReceiptLong     },
       { name: "Plans",         href: "/admin/finance/plans",         icon: MdPriceCheck     },
     ],
   },
@@ -64,7 +67,14 @@ const navSections = [
     title: "System",
     items: [
       { name: "Settings",      href: "/admin/system/settings",      icon: MdTune     },
+      { name: "Legal Policies", href: "/admin/system/legal-policies", icon: MdTune },
       { name: "Announcements", href: "/admin/system/announcements", icon: MdCampaign },
+    ],
+  },
+  {
+    title: "Support",
+    items: [
+      { name: "Contact Messages", href: "/admin/support/messages", icon: MdContactSupport },
     ],
   },
   {
@@ -72,6 +82,7 @@ const navSections = [
     items: [
       { name: "Profile",  href: "/admin/account/profile",  icon: MdPerson   },
       { name: "Security", href: "/admin/account/security", icon: MdSecurity },
+      { name: "Notifications", href: "/admin/notifications", icon: MdNotifications },
       { name: "Logout",   href: "/logout",                 icon: MdLogout   },
     ],
   },
@@ -81,7 +92,7 @@ export default function AdminSidebar({ className = "" }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    Platform: true, Finance: true, Moderation: true, System: true, Account: true,
+    Platform: true, Finance: true, Moderation: true, System: true, Support: true, Account: true,
   });
 
   const toggleSection = (title: string) =>
@@ -91,7 +102,7 @@ export default function AdminSidebar({ className = "" }: SidebarProps) {
     <aside
       className={`
         sticky top-0 z-sidebar
-        flex h-screen flex-col
+        hidden h-screen shrink-0 flex-col lg:flex
         bg-navy text-white
         border-r border-white/10
         transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]
@@ -104,7 +115,7 @@ export default function AdminSidebar({ className = "" }: SidebarProps) {
         className={`
           relative shrink-0 flex flex-col items-center justify-center
           border-b border-white/10 transition-all duration-300
-          ${collapsed ? "h-[96px] gap-2 py-3" : "h-20"}
+          ${collapsed ? "h-[112px] gap-2 py-3" : "h-[112px]"}
         `}
       >
         <Link
@@ -116,13 +127,8 @@ export default function AdminSidebar({ className = "" }: SidebarProps) {
             src="/votex-logo.png"
             alt={`${SITE_CONFIG.name} logo`}
             width={100} height={100} priority
-            className={`object-contain transition-all duration-300 ${collapsed ? "h-8 w-8" : "h-9 w-9"}`}
+            className={`h-auto w-auto transition-all duration-300 ${collapsed ? "max-w-14" : ""}`}
           />
-          {!collapsed && (
-            <span className="mt-1.5 font-serif font-bold tracking-[0.18em] text-gold text-[12.5px] leading-none">
-              {SITE_CONFIG.name.toUpperCase()}
-            </span>
-          )}
           {collapsed && (
             <span className="
               pointer-events-none absolute left-full top-1/2 z-[60]
@@ -211,16 +217,25 @@ export default function AdminSidebar({ className = "" }: SidebarProps) {
 
                       return (
                         <li key={item.name}>
-                          <Link
-                            href={item.href}
-                            className={`
+                          {isLogout ? (
+                            <LogoutButton
+                              loginPath="/login/platform-admin/v1"
+                              iconOnly={collapsed}
+                              className={`
+                              group relative flex h-11 w-full items-center rounded-md text-left
+                              transition-all duration-150 disabled:cursor-wait disabled:opacity-50
+                              ${collapsed ? "justify-center" : "gap-3 px-3"}
+                              text-red-400/80 hover:bg-red-500/10 hover:text-red-400
+                            `}
+                            />
+                          ) : (
+                            <Link
+                              href={item.href}
+                              className={`
                               group relative flex h-11 items-center rounded-md
                               transition-all duration-150
                               ${collapsed ? "justify-center" : "gap-3 px-3"}
-                              ${
-                                isLogout
-                                  ? "text-red-400/80 hover:bg-red-500/10 hover:text-red-400"
-                                  : isActive
+                              ${isActive
                                   ? "bg-white/10 text-gold"
                                   : "text-white/55 hover:bg-white/5 hover:text-white"
                               }
@@ -232,7 +247,7 @@ export default function AdminSidebar({ className = "" }: SidebarProps) {
                             <Icon
                               className={`
                                 h-[18px] w-[18px] shrink-0 transition-colors duration-150
-                                ${isLogout ? "text-red-400/70 group-hover:text-red-400" : isActive ? "text-gold" : "text-white/40 group-hover:text-gold/80"}
+                                ${isActive ? "text-gold" : "text-white/40 group-hover:text-gold/80"}
                               `}
                             />
                             {!collapsed && (
@@ -254,7 +269,8 @@ export default function AdminSidebar({ className = "" }: SidebarProps) {
                                 {item.name}
                               </span>
                             )}
-                          </Link>
+                            </Link>
+                          )}
                         </li>
                       );
                     })}

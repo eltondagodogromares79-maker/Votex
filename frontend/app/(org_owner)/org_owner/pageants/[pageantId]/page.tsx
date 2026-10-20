@@ -1,11 +1,15 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ConfirmModal } from "@/src/components/ui/Modal";
+import { useToast } from "@/src/components/ui/Toast";
+import { ApiError } from "@/src/lib/api/client";
 import OrgPageShell from "@/src/features/org_owner/components/OrgPageShell";
 import OrgBadge from "@/src/features/org_owner/components/OrgBadge";
 import { useSession } from "@/src/features/auth/context/SessionContext";
-import { usePageant } from "@/src/features/org_owner/hooks/usePageants";
+import { useArchivePageant, usePageant } from "@/src/features/org_owner/hooks/usePageants";
 import { useVoteRevenue } from "@/src/features/org_owner/hooks/useTransactions";
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
@@ -104,9 +108,23 @@ export default function PageantDashboardPage({
   const { pageantId } = use(params);
   const { currentUser } = useSession();
   const orgId = currentUser?.organizationId ?? "";
+  const router = useRouter();
+  const { toast } = useToast();
+  const [showArchive, setShowArchive] = useState(false);
 
   const { data: pageant, isLoading, isError } = usePageant(orgId, pageantId);
   const { data: revenue } = useVoteRevenue(orgId, { pageantId });
+  const archiveMutation = useArchivePageant(orgId);
+
+  async function archivePageant() {
+    try {
+      await archiveMutation.mutateAsync(pageantId);
+      toast.success("Pageant archived.");
+      router.replace("/org_owner/pageants");
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.userMessage : "Could not archive this pageant.");
+    }
+  }
 
   if (isLoading) {
     return (
@@ -154,6 +172,7 @@ export default function PageantDashboardPage({
   const txCount     = hasRevenue ? totals.reduce((s, t) => s + t.completedTransactions, 0) : 0;
 
   return (
+    <>
     <OrgPageShell
       title={pageant.name}
       breadcrumbs={[
@@ -161,6 +180,11 @@ export default function PageantDashboardPage({
         { label: pageant.name },
       ]}
       action={
+        <div className="flex items-center gap-2">
+        {pageant.status.toLowerCase() !== "archived" && <button
+          onClick={() => setShowArchive(true)}
+          className="inline-flex items-center gap-2 h-9 px-4 border border-error/30 text-error text-small font-medium hover:bg-error/5 transition-colors"
+        >Archive draft</button>}
         <Link
           href={`/org_owner/pageants/${pageantId}/settings`}
           className="inline-flex items-center gap-2 h-9 px-4 bg-navy text-white text-small font-medium hover:bg-navy/90 transition-colors"
@@ -171,6 +195,7 @@ export default function PageantDashboardPage({
           </svg>
           Settings
         </Link>
+        </div>
       }
     >
 
@@ -324,6 +349,24 @@ export default function PageantDashboardPage({
         </div>
       </section>
 
+      <div className="mt-6 border border-warning/30 bg-warning/5 px-4 py-3">
+        <p className="text-small font-semibold text-charcoal">Pageant removal and management</p>
+        <p className="text-caption text-muted mt-1 leading-relaxed">
+          An untouched draft can be archived from here. Once staff, rounds, or categories have been configured, archiving is blocked to preserve the pageant and its plan usage. Vote packages can be edited or deactivated under Vote Packages; deactivation preserves sales history.
+        </p>
+      </div>
+
     </OrgPageShell>
+    <ConfirmModal
+      open={showArchive}
+      onClose={() => setShowArchive(false)}
+      onConfirm={archivePageant}
+      title="Archive pageant draft?"
+      description={`Archive “${pageant.name}”? Only an untouched pageant can be archived. Configured pageants remain locked and keep their plan slot.`}
+      confirmLabel="Archive draft"
+      loading={archiveMutation.isPending}
+      destructive
+    />
+    </>
   );
 }

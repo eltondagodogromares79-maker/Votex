@@ -38,11 +38,19 @@ export type PaymentStatus =
   | "refunded"
   | "partially_refunded";
 
+export type SubscriptionPaymentMode = "MANUAL" | "AUTOMATED";
+
 // ─── Re-exports from org-owner (canonical location for these types) ───────────
 
 export type {
   AvailablePlan,
   OrganizationSubscription,
+  PendingSubscriptionPayment,
+  SubscriptionPaymentProof,
+  ManualPaymentMethod,
+  SubmitPaymentProofRequest,
+  ReviewPaymentProofRequest,
+  RevokePaymentApprovalRequest,
   SubscribeRequest,
   TransactionHistoryResponse,
   OrganizationTransaction,

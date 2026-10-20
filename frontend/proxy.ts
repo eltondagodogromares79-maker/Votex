@@ -11,7 +11,7 @@ import type { FrontendRole } from "@/src/lib/auth/roles";
  *   2. Does their role match the route?  (at_hint value matches required role)
  *
  * On failure:
- *   - Not authenticated  → redirect to role-specific login page with ?redirect=<path>
+ *   - Not authenticated  → redirect to shared login (or hidden admin login) with ?redirect=<path>
  *   - Wrong role         → redirect to /forbidden
  *
  * IMPORTANT: This is a UX gate, not the security boundary.
@@ -26,12 +26,12 @@ const AT_HINT_COOKIE = "at_hint";
 // ─── Route → required role mapping ───────────────────────────────────────────
 
 const PROTECTED_ROUTES: Array<{ prefix: string; role: FrontendRole; loginPath: string }> = [
-  { prefix: "/admin",       role: "admin",       loginPath: "/login"            },
-  { prefix: "/org_owner",   role: "org_owner",   loginPath: "/login/org-owner"  },
-  { prefix: "/coordinator", role: "coordinator", loginPath: "/login/coordinator" },
-  { prefix: "/judge",       role: "judge",       loginPath: "/login/judge"      },
-  { prefix: "/tabulator",   role: "tabulator",   loginPath: "/login/tabulator"  },
-  { prefix: "/audience",    role: "audience",    loginPath: "/login/audience"   },
+  { prefix: "/admin",       role: "admin",       loginPath: "/login/platform-admin/v1" },
+  { prefix: "/org_owner",   role: "org_owner",   loginPath: "/login" },
+  { prefix: "/coordinator", role: "coordinator", loginPath: "/login" },
+  { prefix: "/judge",       role: "judge",       loginPath: "/login" },
+  { prefix: "/tabulator",   role: "tabulator",   loginPath: "/login" },
+  { prefix: "/audience",    role: "audience",    loginPath: "/login" },
 ];
 
 // ─── Proxy function ───────────────────────────────────────────────────────────

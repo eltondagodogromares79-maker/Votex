@@ -99,11 +99,14 @@ export interface LoginResponse {
 export interface MeResponse {
   userId: string;
   email: string;
+  pendingEmail: string | null;
+  emailVerifiedAt: string | null;
   firstName: string;
   middleName: string | null;
   lastName: string;
   phone: string | null;
   profileImageUrl: string | null;
+  mustChangePassword: boolean;
 }
 
 /**

@@ -2,6 +2,7 @@ use crate::domain::{
     advancement::Advancement,
     contestant::Contestant,
     pageant::AssignedPageant,
+    results::RoundResultEntry,
     round::Round,
     setup::{Category, Criterion},
 };
@@ -21,4 +22,10 @@ pub trait TabulationWorkflow: Send + Sync {
         pageant: Uuid,
         round: Uuid,
     ) -> Result<Vec<Advancement>, AppError>;
+    async fn leaderboard(
+        &self,
+        user: Uuid,
+        pageant: Uuid,
+        round: Uuid,
+    ) -> Result<Vec<RoundResultEntry>, AppError>;
 }

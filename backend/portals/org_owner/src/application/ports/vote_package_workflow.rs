@@ -31,4 +31,11 @@ pub trait VotePackageWorkflow: Send + Sync {
         pageant_id: Uuid,
         package_id: Uuid,
     ) -> Result<(), AppError>;
+
+    async fn activate(
+        &self,
+        organization_id: Uuid,
+        pageant_id: Uuid,
+        package_id: Uuid,
+    ) -> Result<(), AppError>;
 }

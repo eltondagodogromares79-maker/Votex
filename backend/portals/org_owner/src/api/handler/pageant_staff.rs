@@ -71,6 +71,30 @@ pub async fn revoke_pageant_coordinator(
     .await
 }
 
+pub async fn activate_pageant_coordinator(
+    application: web::Data<PageantStaffApplication>,
+    path: web::Path<PageantStaffItemPath>,
+) -> Result<HttpResponse, AppError> {
+    activate_for_role(
+        application,
+        path.into_inner(),
+        PageantStaffRole::Coordinator,
+    )
+    .await
+}
+
+pub async fn delete_pageant_coordinator_assignment(
+    application: web::Data<PageantStaffApplication>,
+    path: web::Path<PageantStaffItemPath>,
+) -> Result<HttpResponse, AppError> {
+    delete_for_role(
+        application,
+        path.into_inner(),
+        PageantStaffRole::Coordinator,
+    )
+    .await
+}
+
 pub async fn assign_judge(
     request: HttpRequest,
     application: web::Data<PageantStaffApplication>,
@@ -92,6 +116,20 @@ pub async fn revoke_judge(
     path: web::Path<PageantStaffItemPath>,
 ) -> Result<HttpResponse, AppError> {
     revoke_for_role(application, path.into_inner(), PageantStaffRole::Judge).await
+}
+
+pub async fn activate_judge(
+    application: web::Data<PageantStaffApplication>,
+    path: web::Path<PageantStaffItemPath>,
+) -> Result<HttpResponse, AppError> {
+    activate_for_role(application, path.into_inner(), PageantStaffRole::Judge).await
+}
+
+pub async fn delete_judge_assignment(
+    application: web::Data<PageantStaffApplication>,
+    path: web::Path<PageantStaffItemPath>,
+) -> Result<HttpResponse, AppError> {
+    delete_for_role(application, path.into_inner(), PageantStaffRole::Judge).await
 }
 
 pub async fn list_tabulator(
@@ -122,6 +160,20 @@ pub async fn revoke_tabulator(
     path: web::Path<PageantStaffItemPath>,
 ) -> Result<HttpResponse, AppError> {
     revoke_for_role(application, path.into_inner(), PageantStaffRole::Tabulator).await
+}
+
+pub async fn activate_tabulator(
+    application: web::Data<PageantStaffApplication>,
+    path: web::Path<PageantStaffItemPath>,
+) -> Result<HttpResponse, AppError> {
+    activate_for_role(application, path.into_inner(), PageantStaffRole::Tabulator).await
+}
+
+pub async fn delete_tabulator_assignment(
+    application: web::Data<PageantStaffApplication>,
+    path: web::Path<PageantStaffItemPath>,
+) -> Result<HttpResponse, AppError> {
+    delete_for_role(application, path.into_inner(), PageantStaffRole::Tabulator).await
 }
 
 async fn list_for_role(
@@ -172,6 +224,28 @@ async fn revoke_for_role(
 ) -> Result<HttpResponse, AppError> {
     application
         .revoke(path.organization_id, path.pageant_id, path.user_id, role)
+        .await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+async fn activate_for_role(
+    application: web::Data<PageantStaffApplication>,
+    path: PageantStaffItemPath,
+    role: PageantStaffRole,
+) -> Result<HttpResponse, AppError> {
+    application
+        .activate(path.organization_id, path.pageant_id, path.user_id, role)
+        .await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+async fn delete_for_role(
+    application: web::Data<PageantStaffApplication>,
+    path: PageantStaffItemPath,
+    role: PageantStaffRole,
+) -> Result<HttpResponse, AppError> {
+    application
+        .delete_assignment(path.organization_id, path.pageant_id, path.user_id, role)
         .await?;
     Ok(HttpResponse::NoContent().finish())
 }

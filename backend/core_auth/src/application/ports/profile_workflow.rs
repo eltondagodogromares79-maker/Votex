@@ -1,4 +1,4 @@
-use crate::contracts::profile::{ProfileResponse, UpdateProfileRequest};
+use crate::contracts::profile::{ProfileResponse, RequestEmailChange, UpdateProfileRequest};
 use async_trait::async_trait;
 use core_infra::AppError;
 use uuid::Uuid;
@@ -17,4 +17,13 @@ pub trait ProfileWorkflow: Send + Sync {
         role: &str,
         profile: UpdateProfileRequest,
     ) -> Result<ProfileResponse, AppError>;
+
+    async fn request_email_change(
+        &self,
+        user_id: Uuid,
+        role: &str,
+        request: RequestEmailChange,
+    ) -> Result<ProfileResponse, AppError>;
+
+    async fn delete_account(&self, user_id: Uuid, current_password: &str) -> Result<(), AppError>;
 }

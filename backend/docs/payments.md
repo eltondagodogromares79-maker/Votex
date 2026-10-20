@@ -1,6 +1,10 @@
 # PayMongo checkout
 
-The API uses PayMongo hosted Checkout Sessions for paid organization plans and audience vote packages. Secret keys stay in the API process. `PAYMONGO_SECRET_KEY`, `PAYMONGO_WEBHOOK_SECRET_KEY`, `PAYMONGO_SUCCESS_URL`, `PAYMONGO_CANCEL_URL`, and optionally `PAYMONGO_PAYMENT_METHOD_TYPES` must be set in the server environment.
+The API uses PayMongo hosted Checkout Sessions for audience vote packages and, optionally, paid organization plans. Secret keys stay in the API process. `PAYMONGO_SECRET_KEY`, `PAYMONGO_WEBHOOK_SECRET_KEY`, `PAYMONGO_SUCCESS_URL`, `PAYMONGO_CANCEL_URL`, and optionally `PAYMONGO_PAYMENT_METHOD_TYPES` must be set in the server environment.
+
+Set `SUBSCRIPTION_PAYMENT_MODE=MANUAL` to use bank/mobile-wallet transfer references and optional receipt uploads with administrator review. Set it to `AUTOMATED` to send new paid organization-plan subscriptions to PayMongo hosted checkout. The default is `MANUAL`. Audience vote payments always use PayMongo, regardless of this subscription-only switch. Use only the backend `.env`; never expose PayMongo secret or webhook keys to the browser. Changing this setting affects new subscriptions; pending payments keep the method they were created with.
+
+For local development, use an HTTPS tunnel for the frontend and point `PAYMONGO_SUCCESS_URL` and `PAYMONGO_CANCEL_URL` at its plans page with `?checkout=success` and `?checkout=cancelled`. These redirects only show status guidance; the subscription becomes active only after the signed webhook is received. `PAYMONGO_BASE_URL` is not needed: the backend calls PayMongo's fixed API host, while the webhook must be registered in PayMongo to reach your publicly accessible backend.
 
 Apply migration `025_paymongo_checkout_idempotency.sql` before enabling checkout. Register one HTTPS webhook in the PayMongo dashboard at:
 
@@ -12,7 +16,7 @@ Subscribe it to `checkout_session.payment.paid`. Configure the test endpoint wit
 
 ## API usage
 
-- Organization plan purchase: `POST /api/v1/organizations/{organization_id}/subscriptions`, body `{"plan_id":"..."}`, and a unique `Idempotency-Key` request header. Paid plans return a `checkout_url`; retry with the same header to resume the same operation.
+- Organization plan purchase: `POST /api/v1/organizations/{organization_id}/subscriptions`, body `{"plan_id":"..."}`, and a unique `Idempotency-Key` request header. In `MANUAL` mode, paid plans require transfer details and administrator review. In `AUTOMATED` mode, paid plans return a `checkout_url`; `POST /api/v1/organizations/{organization_id}/subscriptions/{subscription_id}/checkout` resumes that PayMongo checkout. Existing pending payments retain their original payment method when the mode changes.
 - Audience catalog: `GET /api/v1/audience/pageants/{pageant_id}/vote-packages` and `GET /api/v1/audience/pageants/{pageant_id}/contestants`.
 - Audience purchase: `POST /api/v1/audience/pageants/{pageant_id}/votes`, body `{"contestant_id":"...","package_id":"..."}`, and a unique `Idempotency-Key` header. The response contains the hosted checkout URL and a vote purchase ID.
 - Audience payment status: `GET /api/v1/audience/votes/{vote_id}`. Votes appear in totals after the paid webhook is processed.

@@ -5,7 +5,8 @@ use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
 use crate::{
-    application::ports::pageant_workflow::PageantWorkflow, domain::pageant::AssignedPageant,
+    application::ports::pageant_workflow::PageantWorkflow,
+    domain::pageant::{AssignedPageant, PageantResourceLimits, RoundCategoryUsage},
 };
 
 pub struct PostgresPageantWorkflow {
@@ -105,6 +106,116 @@ impl PageantWorkflow for PostgresPageantWorkflow {
             .map_err(database_error)?
             .map(AssignedPageant::from)
             .ok_or_else(|| AppError::NotFound("assigned pageant".to_owned()))
+    }
+
+    async fn get_resource_limits(
+        &self,
+        coordinator_id: Uuid,
+        pageant_id: Uuid,
+    ) -> Result<PageantResourceLimits, AppError> {
+        #[derive(FromRow)]
+        struct LimitsRow {
+            has_active_subscription: bool,
+            max_judges_per_pageant: Option<i32>,
+            max_tabulator_users: Option<i32>,
+            max_rounds_per_pageant: Option<i32>,
+            max_categories_per_round: Option<i32>,
+            judges_used: i64,
+            tabulators_used: i64,
+            rounds_used: i64,
+            categories_used: i64,
+        }
+
+        let row = sqlx::query_as::<_, LimitsRow>(
+            r#"
+            SELECT (plan.id IS NOT NULL) AS has_active_subscription,
+                   plan.max_judges_per_pageant,
+                   plan.max_tabulator_users,
+                   plan.max_rounds_per_pageant,
+                   plan.max_categories_per_round,
+                   (SELECT COUNT(DISTINCT assignment.user_id)
+                    FROM pageant_member_roles assignment
+                    JOIN roles role ON role.id = assignment.role_id
+                    WHERE assignment.pageant_id = pageant.id
+                      AND assignment.is_active = TRUE
+                      AND role.code = 'PAGEANT_JUDGE'
+                      AND role.scope = 'PAGEANT'::role_scope
+                      AND role.is_active = TRUE) AS judges_used,
+                   (SELECT COUNT(DISTINCT assignment.user_id)
+                    FROM pageant_member_roles assignment
+                    JOIN roles role ON role.id = assignment.role_id
+                    JOIN pageants staff_pageant ON staff_pageant.id = assignment.pageant_id
+                    WHERE staff_pageant.organization_id = pageant.organization_id
+                      AND staff_pageant.status <> 'ARCHIVED'::pageant_status
+                      AND assignment.is_active = TRUE
+                      AND role.code = 'PAGEANT_TABULATOR'
+                      AND role.scope = 'PAGEANT'::role_scope
+                      AND role.is_active = TRUE) AS tabulators_used,
+                   (SELECT COUNT(*) FROM pageant_rounds round WHERE round.pageant_id = pageant.id) AS rounds_used,
+                   (SELECT COUNT(*) FROM pageant_categories category
+                    WHERE category.pageant_id = pageant.id AND category.is_active = TRUE) AS categories_used
+            FROM pageants pageant
+            JOIN pageant_member_roles assignment ON assignment.pageant_id = pageant.id
+            JOIN roles assigned_role ON assigned_role.id = assignment.role_id
+            LEFT JOIN LATERAL (
+                SELECT plan.id, plan.max_judges_per_pageant, plan.max_tabulator_users,
+                       plan.max_rounds_per_pageant, plan.max_categories_per_round
+                FROM organization_subscriptions subscription
+                JOIN subscription_plans plan ON plan.id = subscription.plan_id
+                WHERE subscription.organization_id = pageant.organization_id
+                  AND subscription.status IN ('TRIALING', 'ACTIVE', 'PAST_DUE', 'PAUSED')
+                ORDER BY subscription.created_at DESC, subscription.id DESC
+                LIMIT 1
+            ) plan ON TRUE
+            WHERE pageant.id = $1
+              AND assignment.user_id = $2
+              AND assignment.is_active = TRUE
+              AND assigned_role.code = 'PAGEANT_COORDINATOR'
+              AND assigned_role.scope = 'PAGEANT'::role_scope
+              AND assigned_role.is_active = TRUE
+            LIMIT 1
+            "#,
+        )
+        .bind(pageant_id)
+        .bind(coordinator_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(database_error)?
+        .ok_or_else(|| AppError::NotFound("assigned pageant".to_owned()))?;
+
+        let round_categories = sqlx::query_as::<_, (Uuid, String, i64)>(
+            "SELECT round.id, round.name, COUNT(category.id) FILTER (WHERE category.is_active = TRUE) AS categories_used \
+             FROM pageant_rounds round \
+             LEFT JOIN pageant_round_categories round_category ON round_category.round_id = round.id \
+             LEFT JOIN pageant_categories category ON category.id = round_category.category_id \
+             WHERE round.pageant_id = $1 \
+             GROUP BY round.id, round.name, round.round_number \
+             ORDER BY round.round_number, round.id",
+        )
+        .bind(pageant_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(database_error)?
+        .into_iter()
+        .map(|(round_id, round_name, categories_used)| RoundCategoryUsage {
+            round_id,
+            round_name,
+            categories_used,
+        })
+        .collect();
+
+        Ok(PageantResourceLimits {
+            has_active_subscription: row.has_active_subscription,
+            max_judges_per_pageant: row.max_judges_per_pageant,
+            max_tabulator_users: row.max_tabulator_users,
+            max_rounds_per_pageant: row.max_rounds_per_pageant,
+            max_categories_per_round: row.max_categories_per_round,
+            judges_used: row.judges_used,
+            tabulators_used: row.tabulators_used,
+            rounds_used: row.rounds_used,
+            categories_used: row.categories_used,
+            round_categories,
+        })
     }
 
     async fn update_assigned(

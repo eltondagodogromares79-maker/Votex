@@ -43,7 +43,7 @@ impl From<CoordinatorRow> for OrganizationCoordinator {
 
 const SELECT_COORDINATORS: &str = r#"
     SELECT om.organization_id, u.id AS user_id, u.email::text AS email,
-           u.first_name, u.last_name, om.is_active
+           u.first_name, u.last_name, omr.is_active
     FROM organization_members om
     INNER JOIN organization_member_roles omr ON omr.organization_member_id = om.id
     INNER JOIN roles r ON r.id = omr.role_id
@@ -78,7 +78,7 @@ impl CoordinatorWorkflow for PostgresCoordinatorWorkflow {
     ) -> Result<Vec<OrganizationCoordinator>, AppError> {
         let query = format!(
             "{SELECT_COORDINATORS} \
-             WHERE om.organization_id = $1 AND om.is_active = TRUE \
+             WHERE om.organization_id = $1 \
                AND r.code = 'ORG_COORDINATOR' AND r.scope = 'ORGANIZATION'::role_scope \
              ORDER BY u.last_name, u.first_name, u.email"
         );
@@ -87,7 +87,11 @@ impl CoordinatorWorkflow for PostgresCoordinatorWorkflow {
             .fetch_all(&self.pool)
             .await
             .map_err(db)
-            .map(|rows| rows.into_iter().map(OrganizationCoordinator::from).collect())
+            .map(|rows| {
+                rows.into_iter()
+                    .map(OrganizationCoordinator::from)
+                    .collect()
+            })
     }
 
     async fn get_coordinator(
@@ -113,6 +117,7 @@ impl CoordinatorWorkflow for PostgresCoordinatorWorkflow {
                 INNER JOIN organization_member_roles omr ON omr.organization_member_id = om.id
                 INNER JOIN roles r ON r.id = omr.role_id
                 WHERE om.organization_id = $1 AND om.user_id = $2
+                  AND omr.is_active = TRUE
                   AND r.code = 'ORG_COORDINATOR' AND r.scope = 'ORGANIZATION'::role_scope
             )",
         )
@@ -156,6 +161,7 @@ impl CoordinatorWorkflow for PostgresCoordinatorWorkflow {
                 INNER JOIN roles r ON r.id = omr.role_id
                 WHERE om.organization_id = $1 AND om.user_id = $2
                   AND r.code = 'ORG_COORDINATOR' AND r.scope = 'ORGANIZATION'::role_scope
+                  AND omr.is_active = TRUE
                   AND om.is_active = TRUE
             )",
         )
@@ -197,6 +203,7 @@ impl CoordinatorWorkflow for PostgresCoordinatorWorkflow {
                 INNER JOIN roles r ON r.id = omr.role_id
                 WHERE om.organization_id = $1 AND om.user_id = $2
                   AND r.code = 'ORG_COORDINATOR' AND r.scope = 'ORGANIZATION'::role_scope
+                  AND omr.is_active = TRUE
                   AND om.is_active = TRUE
             )",
         )
@@ -211,7 +218,7 @@ impl CoordinatorWorkflow for PostgresCoordinatorWorkflow {
         }
 
         sqlx::query(
-            "UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2",
+            "UPDATE users SET password_hash = $1, must_change_password = TRUE, updated_at = now() WHERE id = $2",
         )
         .bind(password_hash)
         .bind(user_id)
@@ -232,11 +239,53 @@ impl CoordinatorWorkflow for PostgresCoordinatorWorkflow {
         deactivate_membership_if_unassigned(&mut tx, organization_id, user_id).await?;
         tx.commit().await.map_err(db)
     }
+
+    async fn set_coordinator_active(
+        &self,
+        organization_id: Uuid,
+        user_id: Uuid,
+        is_active: bool,
+    ) -> Result<(), AppError> {
+        let mut tx = self.pool.begin().await.map_err(db)?;
+        let updated = sqlx::query_scalar::<_, Uuid>(
+            "UPDATE organization_member_roles omr SET is_active = $3 \
+             FROM organization_members om, roles r \
+             WHERE omr.organization_member_id = om.id AND omr.role_id = r.id \
+               AND om.organization_id = $1 AND om.user_id = $2 \
+               AND r.code = 'ORG_COORDINATOR' AND r.scope = 'ORGANIZATION'::role_scope \
+               AND omr.is_active <> $3 RETURNING om.user_id",
+        )
+        .bind(organization_id)
+        .bind(user_id)
+        .bind(is_active)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(db)?;
+        if updated.is_none() {
+            return Err(AppError::NotFound("coordinator assignment".to_owned()));
+        }
+        if is_active {
+            sqlx::query(
+                "UPDATE organization_members SET is_active = TRUE, updated_at = now() \
+                 WHERE organization_id = $1 AND user_id = $2",
+            )
+            .bind(organization_id)
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
+        } else {
+            deactivate_membership_if_unassigned(&mut tx, organization_id, user_id).await?;
+        }
+        tx.commit().await.map_err(db)
+    }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-fn db(e: sqlx::Error) -> AppError { AppError::Database(Box::new(e)) }
+fn db(e: sqlx::Error) -> AppError {
+    AppError::Database(Box::new(e))
+}
 
 async fn create_staff_user(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -246,8 +295,8 @@ async fn create_staff_user(
     password_hash: &str,
 ) -> Result<(Uuid, bool), AppError> {
     let inserted = sqlx::query_scalar::<_, Uuid>(
-        "INSERT INTO users (id, email, password_hash, first_name, last_name, status, email_verified_at)
-         VALUES ($1, $2, $3, $4, $5, 'ACTIVE'::user_account_status, now())
+        "INSERT INTO users (id, email, password_hash, first_name, last_name, status, email_verified_at, must_change_password)
+         VALUES ($1, $2, $3, $4, $5, 'ACTIVE'::user_account_status, now(), TRUE)
          ON CONFLICT (email) DO NOTHING RETURNING id",
     )
     .bind(Uuid::new_v4())
@@ -333,7 +382,7 @@ async fn assign_role(
         "INSERT INTO organization_member_roles (organization_member_id, role_id, assigned_by)
          VALUES ($1, $2, $3)
          ON CONFLICT (organization_member_id, role_id)
-         DO UPDATE SET assigned_by = EXCLUDED.assigned_by",
+         DO UPDATE SET assigned_by = EXCLUDED.assigned_by, is_active = TRUE",
     )
     .bind(member_id)
     .bind(role_id)
@@ -371,7 +420,7 @@ async fn get_coordinator_from_pool(
 ) -> Result<OrganizationCoordinator, AppError> {
     let query = format!(
         "{SELECT_COORDINATORS}
-         WHERE om.organization_id = $1 AND om.user_id = $2 AND om.is_active = TRUE
+         WHERE om.organization_id = $1 AND om.user_id = $2 AND om.is_active = TRUE AND omr.is_active = TRUE
            AND r.code = 'ORG_COORDINATOR' AND r.scope = 'ORGANIZATION'::role_scope"
     );
     sqlx::query_as::<_, CoordinatorRow>(&query)
@@ -419,6 +468,7 @@ async fn deactivate_membership_if_unassigned(
            AND NOT EXISTS (
                SELECT 1 FROM organization_member_roles omr
                WHERE omr.organization_member_id = om.id
+                 AND omr.is_active = TRUE
            )
            AND NOT EXISTS (
                SELECT 1 FROM pageant_member_roles pmr

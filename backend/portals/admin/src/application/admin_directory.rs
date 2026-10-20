@@ -37,7 +37,11 @@ impl AdminDirectoryApplication {
         self.workflow.get_organization(id).await
     }
 
-    pub async fn list_pageants(&self, limit: i64, offset: i64) -> Result<Vec<AdminPageant>, AppError> {
+    pub async fn list_pageants(
+        &self,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<AdminPageant>, AppError> {
         self.workflow.list_pageants(limit, offset).await
     }
 

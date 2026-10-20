@@ -40,10 +40,12 @@ use admin::{
 };
 use audience::{
     application::{
+        public_catalog::PublicCatalogApplication,
         transactions::TransactionHistoryApplication as AudienceTransactionHistoryApplication,
         voting::VotingApplication,
     },
     infrastructure::postgres::{
+        public_catalog_workflow::PostgresPublicCatalogWorkflow,
         transaction_history_workflow::PostgresTransactionHistoryWorkflow,
         voting_workflow::PostgresVotingWorkflow,
     },
@@ -73,13 +75,15 @@ use judge::{
 };
 use org_owner::{
     application::{
-        coordinators::CoordinatorApplication, pageant_staff::PageantStaffApplication,
-        pageants::PageantApplication, subscriptions::SubscriptionApplication,
+        coordinators::CoordinatorApplication, organizations::OrganizationApplication,
+        pageant_staff::PageantStaffApplication, pageants::PageantApplication,
+        subscriptions::SubscriptionApplication,
         transactions::TransactionHistoryApplication as OrganizationTransactionHistoryApplication,
         vote_packages::VotePackageApplication, vote_revenue::VoteRevenueApplication,
     },
     infrastructure::postgres::{
         coordinator_workflow::PostgresCoordinatorWorkflow,
+        organization_workflow::PostgresOrganizationWorkflow,
         pageant_staff_workflow::PostgresPageantStaffWorkflow,
         pageant_workflow::PostgresPageantWorkflow,
         subscription_workflow::PostgresSubscriptionWorkflow,
@@ -112,6 +116,7 @@ pub struct ApplicationDependencies {
     pub profile: Arc<ProfileApplication>,
     pub authorization: Arc<AuthorizationApplication>,
     pub pageants: Arc<PageantApplication>,
+    pub organizations: Arc<OrganizationApplication>,
     pub coordinators: Arc<CoordinatorApplication>,
     pub vote_packages: Arc<VotePackageApplication>,
     pub org_subscriptions: Arc<SubscriptionApplication>,
@@ -126,6 +131,7 @@ pub struct ApplicationDependencies {
     pub judge: Arc<JudgeApplication>,
     pub tabulation: Arc<TabulationApplication>,
     pub audience_voting: Arc<VotingApplication>,
+    pub audience_public_catalog: Arc<PublicCatalogApplication>,
     pub audience_transactions: Arc<AudienceTransactionHistoryApplication>,
     pub subscription_plans: Arc<SubscriptionPlanApplication>,
     pub admin_directory: Arc<AdminDirectoryApplication>,
@@ -142,12 +148,14 @@ pub struct ApplicationDependencies {
     // ------------------------------------------------------------
     pub auth_config: AuthConfig,
     pub payment_provider: Arc<dyn PaymentProvider>,
+    pub pool: PgPool,
 }
 
 /// Build all application and infrastructure dependencies.
 pub fn build_dependencies(
     auth_config: &AuthConfig,
     payment_config: &PaymentConfig,
+    frontend_url: &str,
     pool: PgPool,
 ) -> std::io::Result<ApplicationDependencies> {
     let email_sender = Arc::new(
@@ -158,6 +166,7 @@ pub fn build_dependencies(
             auth_config.smtp_password.clone(),
             auth_config.email_from_address.clone(),
             auth_config.email_from_name.clone(),
+            frontend_url.to_owned(),
         )
         .map_err(|error| std::io::Error::other(error.to_string()))?,
     );
@@ -279,19 +288,29 @@ pub fn build_dependencies(
     // ============================================================
 
     let org_subscription_workflow = Arc::new(PostgresSubscriptionWorkflow::new(pool.clone()));
+    let organizations = Arc::new(OrganizationApplication::new(Arc::new(
+        PostgresOrganizationWorkflow::new(pool.clone()),
+    )));
     let org_subscriptions = Arc::new(SubscriptionApplication::new(
         org_subscription_workflow.clone(),
         payment_provider.clone(),
+        payment_config.subscription_mode,
     ));
     let pageant_workflow = Arc::new(PostgresPageantWorkflow::new(pool.clone()));
-    let pageants = Arc::new(PageantApplication::new(pageant_workflow, org_subscription_workflow.clone()));
+    let pageants = Arc::new(PageantApplication::new(
+        pageant_workflow,
+        org_subscription_workflow.clone(),
+    ));
     let coordinator_workflow = Arc::new(PostgresCoordinatorWorkflow::new(pool.clone()));
     let coordinators = Arc::new(CoordinatorApplication::new(
         coordinator_workflow,
         email_sender.clone(),
     ));
     let vote_package_workflow = Arc::new(PostgresVotePackageWorkflow::new(pool.clone()));
-    let vote_packages = Arc::new(VotePackageApplication::new(vote_package_workflow, org_subscription_workflow.clone()));
+    let vote_packages = Arc::new(VotePackageApplication::new(
+        vote_package_workflow,
+        org_subscription_workflow.clone(),
+    ));
     let org_vote_revenue_workflow = Arc::new(PostgresVoteRevenueWorkflow::new(pool.clone()));
     let org_vote_revenue = Arc::new(VoteRevenueApplication::new(org_vote_revenue_workflow));
     let org_transaction_workflow = Arc::new(PostgresOrganizationTransactionHistoryWorkflow::new(
@@ -338,6 +357,9 @@ pub fn build_dependencies(
     let audience_transactions = Arc::new(AudienceTransactionHistoryApplication::new(Arc::new(
         PostgresTransactionHistoryWorkflow::new(pool.clone()),
     )));
+    let audience_public_catalog = Arc::new(PublicCatalogApplication::new(Arc::new(
+        PostgresPublicCatalogWorkflow::new(pool.clone()),
+    )));
 
     // ============================================================
     // Platform-admin subscription plan workflows
@@ -370,6 +392,8 @@ pub fn build_dependencies(
     let email_verification = Arc::new(EmailVerificationApplication::new(
         email_verification_workflow,
         auth_config.registration_verification_secret.clone(),
+        email_sender.clone(),
+        auth_config.email_code_expiry_minutes,
     ));
 
     // ============================================================
@@ -398,6 +422,7 @@ pub fn build_dependencies(
         profile,
         authorization,
         pageants,
+        organizations,
         coordinators,
         vote_packages,
         org_subscriptions,
@@ -412,6 +437,7 @@ pub fn build_dependencies(
         judge,
         tabulation,
         audience_voting,
+        audience_public_catalog,
         audience_transactions,
         subscription_plans,
         admin_directory,
@@ -420,5 +446,6 @@ pub fn build_dependencies(
         token_validator,
         auth_config: auth_config.clone(),
         payment_provider,
+        pool,
     })
 }

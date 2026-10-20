@@ -4,6 +4,7 @@ use crate::{
         advancement::Advancement,
         contestant::Contestant,
         pageant::AssignedPageant,
+        results::RoundResultEntry,
         round::Round,
         setup::{Category, Criterion},
     },
@@ -26,7 +27,7 @@ fn db(e: sqlx::Error) -> AppError {
     AppError::Database(Box::new(e))
 }
 async fn verify(pool: &PgPool, user: Uuid, pageant: Uuid) -> Result<(), AppError> {
-    let assigned=sqlx::query_scalar::<_,bool>("SELECT EXISTS(SELECT 1 FROM pageant_member_roles a JOIN roles r ON r.id=a.role_id WHERE a.user_id=$1 AND a.pageant_id=$2 AND a.is_active=TRUE AND r.code='PAGEANT_TABULATOR' AND r.scope='PAGEANT'::role_scope AND r.is_active=TRUE)").bind(user).bind(pageant).fetch_one(pool).await.map_err(db)?;
+    let assigned=sqlx::query_scalar::<_,bool>("SELECT EXISTS(SELECT 1 FROM pageant_member_roles a JOIN roles r ON r.id=a.role_id JOIN pageants p ON p.id=a.pageant_id WHERE a.user_id=$1 AND a.pageant_id=$2 AND a.is_active=TRUE AND r.code='PAGEANT_TABULATOR' AND r.scope='PAGEANT'::role_scope AND r.is_active=TRUE AND p.status IN ('PUBLISHED'::pageant_status, 'ONGOING'::pageant_status, 'COMPLETED'::pageant_status))").bind(user).bind(pageant).fetch_one(pool).await.map_err(db)?;
     if assigned {
         Ok(())
     } else {
@@ -79,10 +80,13 @@ struct RoundRow {
 struct CategoryRow {
     id: Uuid,
     pageant_id: Uuid,
+    round_id: Uuid,
     code: String,
     name: String,
     description: Option<String>,
     display_order: i32,
+    eligibility_scope: String,
+    status: String,
     is_active: bool,
 }
 #[derive(FromRow)]
@@ -110,6 +114,22 @@ struct AdvancementRow {
     reason: Option<String>,
     decided_by: Option<Uuid>,
     decided_at: DateTime<Utc>,
+}
+#[derive(FromRow)]
+struct RoundResultRow {
+    contestant_id: Uuid,
+    contestant_number: i32,
+    contestant_name: String,
+    gender: Option<String>,
+    photo_url: Option<String>,
+    contestant_status: String,
+    category_id: Option<Uuid>,
+    category_name: Option<String>,
+    category_status: Option<String>,
+    eligibility_scope: Option<String>,
+    category_weight: Option<rust_decimal::Decimal>,
+    score: Option<rust_decimal::Decimal>,
+    submitted_judges: Option<i64>,
 }
 #[async_trait]
 impl TabulationWorkflow for PostgresTabulationWorkflow {
@@ -174,16 +194,19 @@ impl TabulationWorkflow for PostgresTabulationWorkflow {
     }
     async fn categories(&self, user: Uuid, pageant: Uuid) -> Result<Vec<Category>, AppError> {
         verify(&self.pool, user, pageant).await?;
-        let rows=sqlx::query_as::<_,CategoryRow>("SELECT id,pageant_id,code,name,description,display_order,is_active FROM pageant_categories WHERE pageant_id=$1 ORDER BY display_order,name").bind(pageant).fetch_all(&self.pool).await.map_err(db)?;
+        let rows=sqlx::query_as::<_,CategoryRow>("SELECT category.id,category.pageant_id,link.round_id,category.code,category.name,category.description,category.display_order,category.eligibility_scope,category.status::text AS status,category.is_active FROM pageant_categories category JOIN pageant_round_categories link ON link.category_id=category.id JOIN pageant_rounds round ON round.id=link.round_id WHERE category.pageant_id=$1 ORDER BY round.round_number,category.display_order,category.name").bind(pageant).fetch_all(&self.pool).await.map_err(db)?;
         Ok(rows
             .into_iter()
             .map(|r| Category {
                 id: r.id,
                 pageant_id: r.pageant_id,
+                round_id: r.round_id,
                 code: r.code,
                 name: r.name,
                 description: r.description,
                 display_order: r.display_order,
+                eligibility_scope: r.eligibility_scope,
+                status: r.status,
                 is_active: r.is_active,
             })
             .collect())
@@ -228,6 +251,109 @@ impl TabulationWorkflow for PostgresTabulationWorkflow {
                 reason: r.reason,
                 decided_by: r.decided_by,
                 decided_at: r.decided_at,
+            })
+            .collect())
+    }
+
+    async fn leaderboard(
+        &self,
+        user: Uuid,
+        pageant: Uuid,
+        round: Uuid,
+    ) -> Result<Vec<RoundResultEntry>, AppError> {
+        verify(&self.pool, user, pageant).await?;
+        let round_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM pageant_rounds WHERE id=$1 AND pageant_id=$2)",
+        )
+        .bind(round)
+        .bind(pageant)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db)?;
+        if !round_exists {
+            return Err(AppError::NotFound("pageant round".into()));
+        }
+
+        let rows = sqlx::query_as::<_, RoundResultRow>(r#"
+            WITH configured AS (
+                SELECT rc.category_id, COUNT(DISTINCT rc.id)::BIGINT AS criteria_count
+                FROM round_criteria rc
+                WHERE rc.round_id = $2 AND rc.category_id IS NOT NULL
+                GROUP BY rc.category_id
+            ), sheet_category_scores AS (
+                SELECT ss.id AS score_sheet_id, ss.contestant_id, rc.category_id,
+                       COUNT(DISTINCT rc.id)::BIGINT AS scored_count,
+                       SUM(
+                           CASE WHEN rc.maximum_score = rc.minimum_score THEN 100::NUMERIC
+                           ELSE LEAST(100::NUMERIC, GREATEST(0::NUMERIC,
+                               (js.raw_score - rc.minimum_score) * 100 / NULLIF(rc.maximum_score - rc.minimum_score, 0)))
+                           END * rc.weight_percentage / 100
+                       ) AS category_score
+                FROM score_sheets ss
+                INNER JOIN judge_assignments ja ON ja.id = ss.judge_assignment_id
+                INNER JOIN judge_scores js ON js.score_sheet_id = ss.id
+                INNER JOIN round_criteria rc ON rc.id = js.round_criterion_id AND rc.round_id = ja.round_id
+                WHERE ja.pageant_id = $1 AND ja.round_id = $2 AND ja.status = 'ACTIVE'
+                  AND ss.status IN ('SUBMITTED', 'LOCKED') AND rc.category_id IS NOT NULL
+                GROUP BY ss.id, ss.contestant_id, rc.category_id
+            ), complete_sheet_scores AS (
+                SELECT scs.contestant_id, scs.category_id, scs.category_score
+                FROM sheet_category_scores scs
+                INNER JOIN configured cfg ON cfg.category_id = scs.category_id
+                WHERE scs.scored_count = cfg.criteria_count
+            ), category_scores AS (
+                SELECT contestant_id, category_id, AVG(category_score) AS score,
+                       COUNT(*)::BIGINT AS submitted_judges
+                FROM complete_sheet_scores
+                GROUP BY contestant_id, category_id
+            )
+            SELECT c.id AS contestant_id, c.contestant_number, c.display_name AS contestant_name,
+                   c.gender, c.photo_url,
+                   COALESCE(candidate_round.status::text, 'REGISTERED') AS contestant_status,
+                   cat.category_id, cat.name AS category_name, cat.status AS category_status,
+                   cat.eligibility_scope, cat.weight_percentage AS category_weight,
+                   cs.score, cs.submitted_judges
+            FROM contestants c
+            LEFT JOIN candidate_rounds candidate_round
+              ON candidate_round.contestant_id = c.id AND candidate_round.round_id = $2
+            LEFT JOIN LATERAL (
+                SELECT prc.category_id, prc.weight_percentage, category.name,
+                       category.status::text AS status, category.eligibility_scope, category.display_order
+                FROM pageant_round_categories prc
+                INNER JOIN pageant_categories category ON category.id = prc.category_id AND category.is_active = TRUE
+                WHERE prc.round_id = $2 AND prc.pageant_id = $1
+                  AND (category.eligibility_scope = 'OPEN'
+                       OR (category.eligibility_scope = 'MEN' AND LOWER(COALESCE(c.gender, '')) = 'male')
+                       OR (category.eligibility_scope IN ('WOMEN', 'LGBTQ_PLUS') AND LOWER(COALESCE(c.gender, '')) <> 'male')
+                       OR category.eligibility_scope = 'CUSTOM')
+            ) cat ON TRUE
+            LEFT JOIN category_scores cs ON cs.contestant_id = c.id AND cs.category_id = cat.category_id
+            WHERE c.pageant_id = $1 AND c.is_active = TRUE
+            ORDER BY CASE WHEN LOWER(COALESCE(c.gender, '')) = 'male' THEN 1 ELSE 0 END,
+                     c.contestant_number, cat.display_order NULLS FIRST, cat.name NULLS FIRST
+        "#)
+        .bind(pageant)
+        .bind(round)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db)?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| RoundResultEntry {
+                contestant_id: row.contestant_id,
+                contestant_number: row.contestant_number,
+                contestant_name: row.contestant_name,
+                gender: row.gender,
+                photo_url: row.photo_url,
+                contestant_status: row.contestant_status,
+                category_id: row.category_id,
+                category_name: row.category_name,
+                category_status: row.category_status,
+                eligibility_scope: row.eligibility_scope,
+                category_weight: row.category_weight,
+                score: row.score,
+                submitted_judges: row.submitted_judges.unwrap_or(0),
             })
             .collect())
     }

@@ -1,12 +1,12 @@
-import Sidebar from "@/src/features/org_owner/components/OrgSidebar";
 import { RouteGuard } from "@/src/features/auth/components/RouteGuard";
+import TabulatorHeader from "@/src/features/tabulator/components/TabulatorHeader";
 
 export default function TabulatorLayout({ children }: { children: React.ReactNode }) {
   return (
-    <RouteGuard allowedRole="tabulator" loginPath="/login/tabulator">
-      <div className="flex min-h-screen bg-slate">
-        <Sidebar />
-        <main className="flex-1 min-h-screen overflow-auto">
+    <RouteGuard allowedRole="tabulator" loginPath="/login">
+      <div className="flex min-h-screen flex-col bg-slate">
+        <TabulatorHeader />
+        <main className="min-h-[calc(100vh-76px)] min-w-0 flex-1 overflow-x-hidden">
           {children}
         </main>
       </div>

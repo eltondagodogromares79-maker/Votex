@@ -95,9 +95,11 @@ impl RegistrationApplication {
     ///
     /// Registration creates:
     ///
-    ///     users
-    ///       └── audience_voters
-    ///       └── user_email_verification_tokens
+    /// ```text
+    /// users
+    ///   ├── audience_voters
+    ///   └── user_email_verification_tokens
+    /// ```
     ///
     /// These records are persisted atomically by RegistrationWorkflow.
     ///
@@ -258,19 +260,10 @@ impl RegistrationApplication {
     ///
     /// The operation creates:
     ///
-    ///     users
-    ///       │
-    ///       └── organizations
-    ///             │
-    ///             └── organization_members
-    ///                   │
-    ///                   └── organization_member_roles
-    ///                         │
-    ///                         └── ORG_OWNER
-    ///
-    ///     users
-    ///       │
-    ///       └── user_email_verification_tokens
+    /// ```text
+    /// users ── organizations ── organization_members ── organization_member_roles ── ORG_OWNER
+    ///   └── user_email_verification_tokens
+    /// ```
     ///
     /// The ORG_OWNER role is NOT supplied by the request.
     ///

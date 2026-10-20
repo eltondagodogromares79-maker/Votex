@@ -56,9 +56,31 @@ export interface AssignPageantStaffRequest {
   email: string;
   firstName?: string | null;
   lastName?: string | null;
+  confirmCrossOrganizationReuse?: boolean;
 }
 
 // ─── Subscriptions ────────────────────────────────────────────────────────────
+
+export interface OrganizationProfile {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  logoUrl: string | null;
+}
+
+export interface UpdateOrganizationProfileRequest {
+  name: string;
+  slug: string;
+  description: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  logoUrl: string | null;
+}
 
 /**
  * org_owner/src/domain/subscription.rs AvailablePlan.
@@ -82,6 +104,54 @@ export interface AvailablePlan {
   customizationEnabled: boolean;
 }
 
+export interface PageantResourceUsage {
+  pageantId: string;
+  pageantName: string;
+  judgesUsed: number;
+  roundsUsed: number;
+  categoriesUsed: number;
+}
+
+export interface OrganizationPlanUsage {
+  planName: string | null;
+  subscriptionStatus: string | null;
+  hasCreatedPageant: boolean;
+  pageantsUsed: number;
+  maxPageants: number | null;
+  tabulatorUsersUsed: number;
+  maxTabulatorUsers: number | null;
+  maxJudgesPerPageant: number | null;
+  maxRoundsPerPageant: number | null;
+  maxCategoriesPerRound: number | null;
+  pageants: PageantResourceUsage[];
+}
+
+export interface OrganizationActivityLog {
+  id: string;
+  organizationId: string | null;
+  pageantId: string | null;
+  actorUserId: string | null;
+  actorEmail: string | null;
+  actorName: string | null;
+  action: string;
+  resourceType: string;
+  resourceId: string | null;
+  beforeData: Record<string, unknown> | null;
+  afterData: Record<string, unknown> | null;
+  requestId: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  success: boolean;
+  failureReason: string | null;
+  createdAt: string;
+}
+
+export interface OrganizationActivityLogPage {
+  items: OrganizationActivityLog[];
+  limit: number;
+  offset: number;
+}
+
 /**
  * org_owner/src/domain/subscription.rs OrganizationSubscription.
  * Returned by GET /api/v1/organizations/:id/subscription.
@@ -102,9 +172,89 @@ export interface OrganizationSubscription {
   checkoutUrl: string | null;
 }
 
+export type ManualPaymentMethod = "GCASH" | "MAYA" | "MARIBANK";
+
+export interface SubscriptionPaymentProof {
+  id: string;
+  subscriptionId: string;
+  organizationId: string;
+  organizationName: string;
+  planName: string;
+  amount: string;
+  amountPaid: string;
+  currency: string;
+  paymentMethod: ManualPaymentMethod;
+  referenceNumber: string;
+  proofUrl: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "REVOKED";
+  submittedAt: string;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  revokedAt: string | null;
+  revocationNote: string | null;
+}
+
+export interface PendingSubscriptionPayment {
+  subscription: OrganizationSubscription;
+  latestProof: SubscriptionPaymentProof | null;
+}
+
+export interface AdminSubscriptionPayment {
+  id: string;
+  amount: string;
+  currency: string;
+  status: string;
+  paymentMethod: string | null;
+  referenceNumber: string | null;
+  createdAt: string;
+  paidAt: string | null;
+}
+
+export interface AdminSubscriptionAction {
+  id: string;
+  action: string;
+  reason: string | null;
+  adminName: string;
+  createdAt: string;
+}
+
+export interface AdminSubscriptionDetails {
+  organizationId: string;
+  organizationName: string;
+  organizationSlug: string;
+  ownerUserId: string;
+  ownerFirstName: string;
+  ownerLastName: string;
+  ownerEmail: string;
+  subscription: OrganizationSubscription | null;
+  payment: AdminSubscriptionPayment | null;
+  proof: SubscriptionPaymentProof | null;
+  actions: AdminSubscriptionAction[];
+}
+
+export interface SubmitPaymentProofRequest {
+  paymentMethod: ManualPaymentMethod;
+  referenceNumber: string;
+  amountPaid: number;
+  proofUrl?: string | null;
+}
+
+export interface ReviewPaymentProofRequest {
+  approved: boolean;
+  note: string | null;
+}
+
+export interface RevokePaymentApprovalRequest {
+  reason: string;
+}
+
 /** POST /api/v1/organizations/:id/subscriptions — request body. */
 export interface SubscribeRequest {
   planId: string;
+  paymentMethod?: ManualPaymentMethod;
+  referenceNumber?: string;
+  amountPaid?: number;
+  proofUrl?: string | null;
 }
 
 // ─── Transactions ─────────────────────────────────────────────────────────────

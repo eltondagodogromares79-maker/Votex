@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use core_infra::AppError;
 use uuid::Uuid;
 
-use crate::domain::pageant::AssignedPageant;
+use crate::domain::pageant::{AssignedPageant, PageantResourceLimits};
 
 #[async_trait]
 pub trait PageantWorkflow: Send + Sync {
@@ -12,6 +12,11 @@ pub trait PageantWorkflow: Send + Sync {
         coordinator_id: Uuid,
         pageant_id: Uuid,
     ) -> Result<AssignedPageant, AppError>;
+    async fn get_resource_limits(
+        &self,
+        coordinator_id: Uuid,
+        pageant_id: Uuid,
+    ) -> Result<PageantResourceLimits, AppError>;
     async fn update_assigned(
         &self,
         coordinator_id: Uuid,

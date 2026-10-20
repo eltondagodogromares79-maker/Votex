@@ -40,3 +40,28 @@ impl RateLimitStore for InMemoryRateLimitStore {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::InMemoryRateLimitStore;
+    use crate::application::ports::rate_limit_store::RateLimitStore;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn enforces_limit_per_key_and_resets_after_window() {
+        let store = InMemoryRateLimitStore::default();
+        let start = Instant::now();
+        let window = Duration::from_secs(30);
+        assert!(store.allow("login:a", 2, window, start));
+        assert!(store.allow("login:a", 2, window, start + Duration::from_secs(1)));
+        assert!(!store.allow("login:a", 2, window, start + Duration::from_secs(2)));
+        assert!(store.allow("login:b", 2, window, start + Duration::from_secs(2)));
+        assert!(store.allow("login:a", 2, window, start + window));
+    }
+
+    #[test]
+    fn zero_limit_rejects_every_request() {
+        let store = InMemoryRateLimitStore::default();
+        assert!(!store.allow("key", 0, Duration::from_secs(1), Instant::now()));
+    }
+}

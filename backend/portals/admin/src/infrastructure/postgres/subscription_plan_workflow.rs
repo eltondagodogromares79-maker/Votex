@@ -44,9 +44,13 @@ impl TryFrom<SubscriptionPlanRow> for SubscriptionPlan {
     fn try_from(row: SubscriptionPlanRow) -> Result<Self, Self::Error> {
         let kind = match row.kind.as_str() {
             "ONE_TIME" => SubscriptionPlanKind::OneTime,
-            "PREMIUM"  => SubscriptionPlanKind::Premium,
-            "CUSTOM"   => SubscriptionPlanKind::Custom,
-            _ => return Err(AppError::Configuration("unknown subscription plan kind".to_owned())),
+            "PREMIUM" => SubscriptionPlanKind::Premium,
+            "CUSTOM" => SubscriptionPlanKind::Custom,
+            _ => {
+                return Err(AppError::Configuration(
+                    "unknown subscription plan kind".to_owned(),
+                ));
+            }
         };
         Ok(Self {
             id: row.id,
@@ -76,9 +80,8 @@ const COLUMNS: &str = "id, code, name, kind::text AS kind, price_amount, currenc
 #[async_trait]
 impl SubscriptionPlanWorkflow for PostgresSubscriptionPlanWorkflow {
     async fn list(&self) -> Result<Vec<SubscriptionPlan>, AppError> {
-        let query = format!(
-            "SELECT {COLUMNS} FROM subscription_plans ORDER BY is_active DESC, name, code"
-        );
+        let query =
+            format!("SELECT {COLUMNS} FROM subscription_plans ORDER BY is_active DESC, name, code");
         let rows = sqlx::query_as::<_, SubscriptionPlanRow>(&query)
             .fetch_all(&self.pool)
             .await
@@ -181,7 +184,9 @@ impl SubscriptionPlanWorkflow for PostgresSubscriptionPlanWorkflow {
 fn map_write_error(error: sqlx::Error) -> AppError {
     if let sqlx::Error::Database(db_err) = &error {
         if db_err.code().as_deref() == Some("23505")
-            && db_err.constraint().is_some_and(|n| n == "subscription_plans_code_key")
+            && db_err
+                .constraint()
+                .is_some_and(|n| n == "subscription_plans_code_key")
         {
             return AppError::Conflict(
                 "a subscription plan with this code already exists".to_owned(),

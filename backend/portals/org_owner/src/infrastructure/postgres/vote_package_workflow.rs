@@ -171,6 +171,34 @@ impl VotePackageWorkflow for PostgresVotePackageWorkflow {
             .map(|_| ())
             .ok_or_else(|| AppError::NotFound("active vote package".to_owned()))
     }
+
+    async fn activate(
+        &self,
+        organization_id: Uuid,
+        pageant_id: Uuid,
+        package_id: Uuid,
+    ) -> Result<(), AppError> {
+        let changed = sqlx::query_scalar::<_, Uuid>(
+            r#"UPDATE pageant_vote_packages package
+               SET is_active = TRUE
+               FROM pageants pageant
+               WHERE package.id = $1 AND package.pageant_id = $2
+                 AND pageant.id = package.pageant_id AND pageant.organization_id = $3
+                 AND pageant.status <> 'ARCHIVED'::pageant_status
+                 AND package.is_active = FALSE
+               RETURNING package.id"#,
+        )
+        .bind(package_id)
+        .bind(pageant_id)
+        .bind(organization_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(database_error)?;
+
+        changed.map(|_| ()).ok_or_else(|| {
+            AppError::Conflict("vote package could not be activated; confirm it is inactive and its pageant is not archived".to_owned())
+        })
+    }
 }
 
 fn database_error(error: sqlx::Error) -> AppError {

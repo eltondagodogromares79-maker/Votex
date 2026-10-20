@@ -5,7 +5,8 @@ use uuid::Uuid;
 use crate::{
     application::admin_directory::AdminDirectoryApplication,
     contracts::directory::{
-        AdminOrganizationResponse, AdminPageantResponse, AdminUserResponse, DirectoryPage, DirectoryQuery,
+        AdminOrganizationResponse, AdminPageantResponse, AdminUserResponse, DirectoryPage,
+        DirectoryQuery,
     },
 };
 
@@ -61,7 +62,10 @@ pub async fn list_pageants(
     let (limit, offset) = query.bounded_values();
     let pageants = application.list_pageants(limit, offset).await?;
     Ok(HttpResponse::Ok().json(DirectoryPage {
-        items: pageants.into_iter().map(AdminPageantResponse::from).collect(),
+        items: pageants
+            .into_iter()
+            .map(AdminPageantResponse::from)
+            .collect(),
         limit,
         offset,
     }))

@@ -2,7 +2,7 @@ use crate::{
     application::judges::JudgeApplication,
     contracts::judge::{
         AssignedPageantResponse, CategoryResponse, ContestantResponse, CriterionResponse,
-        RoundResponse,
+        RoundResponse, SubmitCategoryScoresRequest,
     },
 };
 use actix_web::{HttpMessage, HttpRequest, HttpResponse, web};
@@ -19,6 +19,70 @@ fn user_id(req: &HttpRequest) -> Result<Uuid, AppError> {
 #[derive(serde::Deserialize)]
 pub struct PageantPath {
     pub pageant_id: Uuid,
+}
+#[derive(serde::Deserialize)]
+pub struct CategoryScoringPath {
+    pub pageant_id: Uuid,
+    pub round_id: Uuid,
+    pub category_id: Uuid,
+}
+#[derive(serde::Deserialize)]
+pub struct CandidateScoringPath {
+    pub pageant_id: Uuid,
+    pub round_id: Uuid,
+    pub category_id: Uuid,
+    pub contestant_id: Uuid,
+}
+
+pub async fn category_scoring(
+    req: HttpRequest,
+    app: web::Data<JudgeApplication>,
+    path: web::Path<CategoryScoringPath>,
+) -> Result<HttpResponse, AppError> {
+    let workspace = app
+        .category_scoring(
+            user_id(&req)?,
+            path.pageant_id,
+            path.round_id,
+            path.category_id,
+        )
+        .await?;
+    Ok(HttpResponse::Ok().json(workspace))
+}
+
+pub async fn submit_category_scores(
+    req: HttpRequest,
+    app: web::Data<JudgeApplication>,
+    path: web::Path<CandidateScoringPath>,
+    body: web::Json<SubmitCategoryScoresRequest>,
+) -> Result<HttpResponse, AppError> {
+    let result = app
+        .save_category_score_draft(
+            user_id(&req)?,
+            path.pageant_id,
+            path.round_id,
+            path.category_id,
+            path.contestant_id,
+            body.into_inner().scores,
+        )
+        .await?;
+    Ok(HttpResponse::Ok().json(result))
+}
+
+pub async fn finalize_category_scores(
+    req: HttpRequest,
+    app: web::Data<JudgeApplication>,
+    path: web::Path<CategoryScoringPath>,
+) -> Result<HttpResponse, AppError> {
+    let result = app
+        .submit_category_scores(
+            user_id(&req)?,
+            path.pageant_id,
+            path.round_id,
+            path.category_id,
+        )
+        .await?;
+    Ok(HttpResponse::Ok().json(result))
 }
 pub async fn pageants(
     req: HttpRequest,

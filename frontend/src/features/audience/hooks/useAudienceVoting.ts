@@ -2,11 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { audienceApi } from "../api/audience";
 import type { StartVoteRequest } from "@/src/types";
 
-export function useVotePackages(pageantId: string) {
+export function useVotePackages(pageantId: string, enabled = true) {
   return useQuery({
     queryKey: ["audience", "pageants", pageantId, "vote-packages"],
     queryFn: () => audienceApi.listVotePackages(pageantId),
-    enabled: !!pageantId,
+    enabled: !!pageantId && enabled,
   });
 }
 

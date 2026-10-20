@@ -1,9 +1,5 @@
-import { SignInForm } from "@/src/features/auth/components/login/SignInForm";
-
-export const metadata = {
-  title: "Admin Sign In | Votex",
-};
+import { redirect } from "next/navigation";
 
 export default function AdminLoginPage() {
-  return <SignInForm role="admin" />;
+  redirect("/login/platform-admin/v1");
 }

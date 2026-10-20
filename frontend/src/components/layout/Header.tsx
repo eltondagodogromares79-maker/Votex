@@ -1,3 +1,4 @@
+
 "use client";
 
 import Image from "next/image";
@@ -12,6 +13,7 @@ import { PUBLIC_NAV } from "@/src/config/nav";
 import { SITE_CONFIG } from "@/src/config/site";
 
 import { ROLE_HOME } from "@/src/config/permissions";
+import { useSession } from "@/src/features/auth/context/SessionContext";
 
 // ── Reusable social link wrapper ─────────────────────────────────────────────
 function SocialLink({
@@ -39,45 +41,55 @@ function SocialLink({
 // ── Header ────────────────────────────────────────────────────────────────────
 export function Header() {
   const pathname = usePathname();
+  const { currentUser, isReady } = useSession();
 
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <header className="bg-navy sticky top-0 z-[var(--z-header)]">
-      <div className="container-page flex items-center justify-between gap-6 py-4">
+      <div className="container-page flex items-center justify-between gap-3 py-3 sm:gap-6 sm:py-4">
 
         {/* Col 1 — Logo */}
         <Link
           href="/"
           aria-label={`${SITE_CONFIG.name} – home`}
           className="flex flex-col items-center gap-1 flex-shrink-0
-                     font-serif font-bold text-gold tracking-[0.18em]"
+                     font-serif  text-gold tracking-[0.18em]"
         >
-          {/* Set width/height to the file's real dimensions; h-8/h-10 controls the displayed size */}
           <Image
             src="/votex-logo.png"
             alt=""
             width={100}
             height={100}
-            priority
-            className="h-auto w-auto"
+            preload
+            sizes="80px"
+            className="h-16 w-16 object-contain sm:h-20 sm:w-20"
           />
-          <span className="text-[0.7rem] leading-none">{SITE_CONFIG.name.toUpperCase()}</span>
+
+          {/* <span className="text-[0.7rem] leading-none">
+            {SITE_CONFIG.name.toUpperCase()}
+          </span> */}
         </Link>
 
         {/* Col 2 — Desktop nav */}
-        <nav aria-label="Primary navigation" className="hidden md:flex items-center gap-5">
+        <nav
+          aria-label="Primary navigation"
+          className="hidden md:flex items-center gap-5"
+        >
           {PUBLIC_NAV.map((item) => {
             const active = item.exact
               ? pathname === item.href
               : pathname.startsWith(item.href) && item.href !== "/";
+
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
                   "text-caption font-medium transition-colors duration-150 tracking-wide",
-                  active ? "text-gold" : "text-surface hover:text-white",
+                  active
+                    ? "text-gold"
+                    : "text-surface hover:text-white",
                 )}
               >
                 {item.label}
@@ -86,40 +98,74 @@ export function Header() {
           })}
         </nav>
 
-        {/* Col 3 — two stacked rows: socials on top, auth below */}
-        <div className="hidden md:flex flex-col items-end gap-3 flex-shrink-0">
+        {/* Col 3 — Desktop right side */}
+        <div className="hidden md:flex items-center gap-5 flex-shrink-0">
 
-          {/* Row 1 — social icons stretched to match button row width, space-between */}
-          <div className="flex items-center justify-between w-full">
-            <SocialLink href={SITE_CONFIG.social.facebook} label="Votex on Facebook">
+          {/* Column 1 — Social icons */}
+          <div className="flex items-center gap-3">
+            <SocialLink
+              href={SITE_CONFIG.social.facebook}
+              label="Votex on Facebook"
+            >
               <FaFacebook size={20} />
             </SocialLink>
-            <SocialLink href={SITE_CONFIG.social.instagram} label="Votex on Instagram">
+
+            <SocialLink
+              href={SITE_CONFIG.social.instagram}
+              label="Votex on Instagram"
+            >
               <FaInstagram size={20} />
             </SocialLink>
-            <SocialLink href={SITE_CONFIG.social.whatsapp} label="Message Votex on WhatsApp">
+
+            <SocialLink
+              href={SITE_CONFIG.social.whatsapp}
+              label="Message Votex on WhatsApp"
+            >
               <FaWhatsapp size={20} />
             </SocialLink>
           </div>
 
-          {/* Row 2 — auth buttons, natural width (drives the column width) */}
-          <div className="flex items-center gap-2">
-            
-              {/* <Link href="">
-                <Button variant="secondary" size="sm">{COPY.nav.dashboard}</Button>
-              </Link> */}
-          
-                <Link href="/login">
-                  <Button variant="primary" size="sm"
-                    className="text-surface border-white/20 hover:bg-white/8 hover:text-white">
-                    {COPY.nav.login}
+          {/* Column 2 — User / Auth */}
+          <div className="flex flex-col items-start gap-2">
+
+            {currentUser ? (
+              <>
+                {/* User name — top */}
+                <span className="text-small font-medium text-white/70 whitespace-nowrap">
+                  {currentUser.firstName}
+                </span>
+
+                {/* Dashboard — bottom */}
+                <Link href={ROLE_HOME[currentUser.role]}>
+                  <Button variant="secondary" size="sm">
+                    Go to Dashboard
                   </Button>
                 </Link>
-                <Link href="/register">
-                  <Button variant="secondary" size="sm">{COPY.nav.register}</Button>
-                </Link>
-         
-        
+              </>
+            ) : (
+              isReady && (
+                <>
+                  {/* Login / Register */}
+                  <div className="flex items-center gap-2">
+                    <Link href="/login">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="text-surface border-white/20 hover:bg-white/8 hover:text-white"
+                      >
+                        {COPY.nav.login}
+                      </Button>
+                    </Link>
+
+                    <Link href="/register">
+                      <Button variant="secondary" size="sm">
+                        {COPY.nav.register}
+                      </Button>
+                    </Link>
+                  </div>
+                </>
+              )
+            )}
           </div>
         </div>
 
@@ -130,12 +176,26 @@ export function Header() {
           aria-expanded={mobileOpen}
           onClick={() => setMobileOpen((v) => !v)}
         >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.75}
-            viewBox="0 0 24 24" aria-hidden="true">
+          <svg
+            className="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.75}
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
             {mobileOpen ? (
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
             ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4 6h16M4 12h16M4 18h16"
+              />
             )}
           </svg>
         </button>
@@ -144,6 +204,8 @@ export function Header() {
       {/* Mobile drawer */}
       {mobileOpen && (
         <div className="md:hidden bg-navy border-t border-white/8 px-4 sm:px-6 pb-6">
+
+          {/* Mobile navigation */}
           <nav className="flex flex-col gap-0.5 pt-4 mb-4">
             {PUBLIC_NAV.map((item) => (
               <Link
@@ -159,32 +221,81 @@ export function Header() {
 
           {/* Socials */}
           <div className="flex items-center gap-4 pb-4 mb-4 border-b border-white/8">
-            <SocialLink href={SITE_CONFIG.social.facebook} label="Votex on Facebook">
+            <SocialLink
+              href={SITE_CONFIG.social.facebook}
+              label="Votex on Facebook"
+            >
               <FaFacebook size={20} />
             </SocialLink>
-            <SocialLink href={SITE_CONFIG.social.instagram} label="Votex on Instagram">
+
+            <SocialLink
+              href={SITE_CONFIG.social.instagram}
+              label="Votex on Instagram"
+            >
               <FaInstagram size={20} />
             </SocialLink>
-            <SocialLink href={SITE_CONFIG.social.whatsapp} label="Message Votex on WhatsApp">
+
+            <SocialLink
+              href={SITE_CONFIG.social.whatsapp}
+              label="Message Votex on WhatsApp"
+            >
               <FaWhatsapp size={20} />
             </SocialLink>
           </div>
 
           {/* Auth */}
           <div className="flex flex-col gap-2">
-           
-             
-                <Link href="/login" onClick={() => setMobileOpen(false)}>
-                  <Button variant="primary" size="md" fullWidth
-                    className="text-white/70 border-white/20">
-                    {COPY.nav.login}
+            {currentUser ? (
+              <>
+                <p className="px-1 text-small font-medium text-white/70">
+                  {currentUser.firstName}
+                </p>
+
+                <Link
+                  href={ROLE_HOME[currentUser.role]}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    fullWidth
+                  >
+                    Go to Dashboard
                   </Button>
                 </Link>
-                <Link href="/register" onClick={() => setMobileOpen(false)}>
-                  <Button variant="secondary" size="md" fullWidth>{COPY.nav.register}</Button>
-                </Link>
-           
-         
+              </>
+            ) : (
+              isReady && (
+                <>
+                  <Link
+                    href="/login"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <Button
+                      variant="primary"
+                      size="md"
+                      fullWidth
+                      className="text-white/70 border-white/20"
+                    >
+                      {COPY.nav.login}
+                    </Button>
+                  </Link>
+
+                  <Link
+                    href="/register"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      fullWidth
+                    >
+                      {COPY.nav.register}
+                    </Button>
+                  </Link>
+                </>
+              )
+            )}
           </div>
         </div>
       )}

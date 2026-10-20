@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -25,6 +25,8 @@ type AddTabulatorModalProps = {
   pageantId: string;
   open: boolean;
   onClose: () => void;
+  canAdd?: boolean;
+  limitMessage?: string;
 };
 
 const DEFAULT_VALUES: AssignTabulatorFormValues = {
@@ -54,13 +56,18 @@ export default function AddTabulatorModal({
   pageantId,
   open,
   onClose,
+  canAdd = true,
+  limitMessage,
 }: AddTabulatorModalProps) {
   const assignTabulator = useAssignTabulator(pageantId);
   const { toast } = useToast();
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [confirmReuse, setConfirmReuse] = useState(false);
 
   const {
     register,
     handleSubmit,
+    getValues,
     reset,
     formState: { errors },
   } = useForm<AssignTabulatorFormValues>({
@@ -76,23 +83,42 @@ export default function AddTabulatorModal({
 
   function handleClose() {
     if (assignTabulator.isPending) return;
+    setSubmissionError(null);
+    setConfirmReuse(false);
     onClose();
   }
 
-  async function onSubmit(data: AssignTabulatorFormValues) {
+  async function submitAssignment(data: AssignTabulatorFormValues, confirmed = false) {
+    if (!canAdd) {
+      setSubmissionError(limitMessage ?? "The subscription limit for tabulators has been reached.");
+      return;
+    }
+    setSubmissionError(null);
     try {
       await assignTabulator.mutateAsync({
         firstName: data.firstName.trim(),
         lastName: data.lastName.trim(),
         email: data.email.trim(),
+        confirmCrossOrganizationReuse: confirmed,
       });
 
       toast.success(`${data.firstName.trim()} ${data.lastName.trim()} assigned as tabulator.`);
       reset(DEFAULT_VALUES);
+      setConfirmReuse(false);
       onClose();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.userMessage : "Failed to assign tabulator.");
+      if (err instanceof ApiError && err.code === "STAFF_ACCOUNT_CROSS_ORGANIZATION") {
+        setConfirmReuse(true);
+        setSubmissionError(err.userMessage);
+        return;
+      }
+      setSubmissionError(err instanceof ApiError ? err.userMessage : "Failed to assign tabulator. Please try again.");
     }
+  }
+
+  async function onSubmit(data: AssignTabulatorFormValues) {
+    setConfirmReuse(false);
+    await submitAssignment(data);
   }
 
   return (
@@ -113,6 +139,7 @@ export default function AddTabulatorModal({
             form="add-tabulator-form"
             type="submit"
             loading={assignTabulator.isPending}
+            disabled={!canAdd || assignTabulator.isPending}
           >
             Add Tabulator
           </Button>
@@ -120,6 +147,9 @@ export default function AddTabulatorModal({
       }
     >
       <form id="add-tabulator-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
+        {!canAdd && limitMessage ? <div role="alert" className="border border-amber-300 bg-amber-50 px-4 py-3 text-small text-amber-900">{limitMessage}</div> : null}
+        {submissionError ? <div role="alert" aria-live="polite" className={`flex gap-3 border px-4 py-3 text-small leading-relaxed ${confirmReuse ? "border-amber-300/50 bg-amber-300/10 text-amber-50" : "border-error/40 bg-error/10 text-red-100"}`}><span aria-hidden="true" className="font-bold">!</span><p>{submissionError}</p></div> : null}
+        {confirmReuse ? <div className="space-y-3 rounded border border-amber-300/30 bg-amber-300/5 p-4"><p className="text-caption leading-relaxed text-white/75">Continuing links the existing account and password to this organization’s pageant. No new account or password email will be created.</p><div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" onClick={() => void submitAssignment(getValues(), true)} loading={assignTabulator.isPending}>Use existing account</Button><Button variant="ghost" size="sm" onClick={() => { setConfirmReuse(false); setSubmissionError(null); }} disabled={assignTabulator.isPending}>Cancel</Button></div></div> : null}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <Field label={<>First Name <span className="text-error">*</span></>} error={errors.firstName?.message}>
@@ -136,7 +166,7 @@ export default function AddTabulatorModal({
         <Field
           label={<>Email Address <span className="text-error">*</span></>}
           error={errors.email?.message}
-          hint="An existing account will be linked, or a new account created with credentials emailed automatically."
+          hint="Each email can have one staff role: judge or tabulator. Existing accounts are linked; new accounts receive credentials by email."
         >
           <input type="email" placeholder="tabulator@example.com" autoComplete="email" disabled={assignTabulator.isPending}
             {...register("email")} className={fieldInput} />

@@ -4,36 +4,32 @@ import Image from "next/image";
 import { HOME_CONTENT } from "@/src/content/home";
 import { SITE_CONFIG } from "@/src/config/site";
 import { Button } from "@/src/components/ui/Button";
+import { PublicDashboardLink } from "@/src/features/public/components/PublicDashboardLink";
 
 export const metadata: Metadata = {
-  title: "Votex — Pageant Management Platform",
+  title: "Pageant Management Platform",
   description: SITE_CONFIG.description,
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: "VoteX — Pageant Management Platform",
+    description: SITE_CONFIG.description,
+    url: "/",
+    images: [{ url: "/hero-2.webp", alt: "VoteX pageant management platform" }],
+  },
 };
 
 const MARQUEE_ITEMS = [
-  "Miss Universe Philippines 2025",
-  "Miss Grand International",
-  "Binibining Pilipinas 2025",
-  "Mr. & Ms. Campus Royalty",
-  "Miss Earth Philippines",
-  "Mutya ng Pilipinas",
-  "Little Miss Philippines",
-  "Ms. Senior Philippines",
-  "Mr. Bagong Pilipino",
-  "Miss Tourism Philippines",
-  "Reyna ng Bayan 2025",
-  "Miss Intercontinental PH",
-];
-
-const STATS = [
-  { value: "500+", label: "Events managed" },
-  { value: "12k+", label: "Scores submitted" },
-  { value: "99.9%", label: "Uptime" },
+  "Pageant Setup",
+  "Contestant Management",
+  "Rounds & Categories",
+  "Judge Scoring",
+  "Tabulation",
+  "Audience Voting",
 ];
 
 // Unsplash photos — pageant / event / crown / stage themed
 const IMG = {
-  // Features section — coordinator at a laptop on event night
+  // Feature section visual
   features: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=900&q=80&auto=format&fit=crop",
   // Roles section — judges panel / audience at an event
   roles:    "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=900&q=80&auto=format&fit=crop",
@@ -54,7 +50,7 @@ function SectionRule({ align = "left" }: { align?: "left" | "center" }) {
 }
 
 export default function HomePage() {
-  const { hero, features, howItWorks, roles, testimonials, cta } = HOME_CONTENT;
+  const { hero, features, howItWorks, roles, cta } = HOME_CONTENT;
 
   return (
     <>
@@ -70,8 +66,9 @@ export default function HomePage() {
           src="/hero-2.webp"
           alt=""
           fill
-          priority
+          preload
           sizes="100vw"
+          quality={75}
           className="object-cover object-[75%_25%] lg:object-[center_25%]"
         />
       </div>
@@ -97,9 +94,7 @@ export default function HomePage() {
             </p>
             <div className="w-8 h-px bg-gold/35 mb-8 hidden lg:block" />
             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-              <Link href="/register" className="w-full sm:w-auto">
-                <Button variant="secondary" size="md" fullWidth>{hero.cta}</Button>
-              </Link>
+              <PublicDashboardLink href="/register" label={hero.cta} loggedInLabel="Open Dashboard" linkClassName="w-full sm:w-auto" fullWidth />
               <Link href="/pricing" className="w-full sm:w-auto">
                 <Button variant="primary" size="md" fullWidth
                   className="text-white/70 border-white/20 hover:bg-white/8 hover:text-white">
@@ -108,7 +103,7 @@ export default function HomePage() {
               </Link>
             </div>
             <p className="text-caption text-white/30 mt-7 tracking-wide">
-              Trusted by coordinators across the Philippines
+              For pageant owners, teams, judges, tabulators, and audiences
             </p>
           </div>
           <div aria-hidden="true" />
@@ -159,9 +154,9 @@ export default function HomePage() {
                                      transition-colors">
                       {String(i + 1).padStart(2, "0")}
                     </span>
-                    <p className="font-serif font-semibold text-charcoal text-h3">
+                    <h3 className="font-serif font-semibold text-charcoal text-h3">
                       {f.title}
-                    </p>
+                    </h3>
                     <p className="text-small text-muted leading-relaxed">
                       {f.description}
                     </p>
@@ -174,27 +169,26 @@ export default function HomePage() {
             <div className="relative rounded-sm overflow-hidden min-h-[340px]">
               <Image
                 src={IMG.features}
-                alt="Event coordinator managing a pageant"
+                alt="Event space prepared for a pageant"
                 fill
                 sizes="(max-width: 1024px) 100vw, 50vw"
+                quality={75}
                 className="object-cover object-center"
               />
               <div className="absolute inset-0 bg-navy/55" />
-              {/* Stats anchored at bottom */}
-              <div className="absolute bottom-0 left-0 right-0 p-6">
+              <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-8">
                 <p className="text-caption font-semibold uppercase tracking-[0.16em]
                               text-gold mb-4">
-                  By the numbers
+                  One connected workspace
                 </p>
-                <div className="grid grid-cols-3 gap-4">
-                  {STATS.map((s) => (
-                    <div key={s.label}>
-                      <p className="font-serif font-bold text-white text-h1
-                                    leading-none mb-0.5">
-                        {s.value}
-                      </p>
-                      <p className="text-caption text-white/50">{s.label}</p>
-                    </div>
+                <p className="max-w-md font-serif text-xl font-semibold leading-snug text-white sm:text-2xl">
+                  Pageant setup, judging, tabulation, and audience voting.
+                </p>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {["Set up", "Score", "Review", "Publish"].map((step) => (
+                    <span key={step} className="border border-white/25 bg-navy/40 px-3 py-1 text-caption text-white/85">
+                      {step}
+                    </span>
                   ))}
                 </div>
               </div>
@@ -228,9 +222,9 @@ export default function HomePage() {
                     0{idx + 1}
                   </span>
                 </div>
-                <p className="font-serif font-semibold text-white text-h3 mb-2">
+                <h3 className="font-serif font-semibold text-white text-h3 mb-2">
                   {s.title}
-                </p>
+                </h3>
                 <p className="text-small text-white/45 leading-relaxed max-w-[220px] mx-auto">
                   {s.description}
                 </p>
@@ -255,6 +249,7 @@ export default function HomePage() {
                 alt="Judges at a pageant event"
                 fill
                 sizes="(max-width: 1024px) 100vw, 50vw"
+                quality={75}
                 className="object-cover object-center"
               />
               <div className="absolute inset-0 bg-navy/30" />
@@ -278,9 +273,9 @@ export default function HomePage() {
                                       tracking-widest text-gold/70">
                           {r.role}
                         </p>
-                        <p className="font-serif font-bold text-white text-h3 leading-tight">
+                        <h3 className="font-serif font-bold text-white text-h3 leading-tight">
                           {r.tagline}
-                        </p>
+                        </h3>
                       </div>
                     </div>
                     <ul className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
@@ -303,7 +298,7 @@ export default function HomePage() {
       </section>
 
       {/* ════════════════════════════════════════════════════════════════
-          TESTIMONIALS — full-width bg image, cards on top
+          PRODUCT WORKFLOW — full-width image, workflow cards on top
       ════════════════════════════════════════════════════════════════ */}
       <section className="relative py-28 overflow-hidden">
         {/* Background image with strong navy overlay */}
@@ -313,6 +308,7 @@ export default function HomePage() {
             alt=""
             fill
             sizes="100vw"
+            quality={75}
             className="object-cover object-center"
             aria-hidden="true"
           />
@@ -321,49 +317,29 @@ export default function HomePage() {
 
         <div className="container-page relative z-10">
           <div className="text-center mb-14">
-            <SectionLabel>From our users</SectionLabel>
+            <SectionLabel>How the parts connect</SectionLabel>
             <SectionRule align="center" />
             <h2 className="font-serif font-bold text-white text-h1">
-              {testimonials.heading}
+              {HOME_CONTENT.workflow.heading}
             </h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {testimonials.items.map((t, i) => (
-              <div key={t.name}
+            {HOME_CONTENT.workflow.items.map((item, i) => (
+              <div key={item.title}
                 className="flex flex-col gap-6 bg-white/5 rounded-sm
                            border border-white/10 p-7
                            hover:bg-white/8 hover:border-gold/30
                            transition-colors duration-200">
-
-                {/* Large decorative quote */}
-                <span className="font-serif text-gold/30 text-[3.5rem] leading-none
-                                 select-none -mb-4" aria-hidden="true">
-                  &ldquo;
+                <span className="font-serif text-gold/50 text-caption font-semibold tracking-[0.18em]">
+                  STEP 0{i + 1}
                 </span>
-
-                {/* Quote text */}
-                <p className="text-small text-white/80 leading-relaxed italic flex-1">
-                  {t.quote}
+                <h3 className="font-serif text-h3 font-semibold text-white">
+                  {item.title}
+                </h3>
+                <p className="text-small text-white/70 leading-relaxed">
+                  {item.description}
                 </p>
-
-                {/* Divider */}
-                <div className="w-full h-px bg-white/10" />
-
-                {/* Avatar + attribution */}
-                <div className="flex items-center gap-4">
-                  {/* Placeholder avatar — gold monogram */}
-                  <div className="w-11 h-11 rounded-full bg-gold/20 border border-gold/30
-                                  flex items-center justify-center shrink-0">
-                    <span className="font-serif font-bold text-gold text-body">
-                      {t.name.charAt(0)}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-small font-semibold text-white">{t.name}</p>
-                    <p className="text-caption text-gold/70">{t.title}</p>
-                  </div>
-                </div>
               </div>
             ))}
           </div>
@@ -384,6 +360,7 @@ export default function HomePage() {
                 alt="Celebration at an event"
                 fill
                 sizes="(max-width: 1024px) 100vw, 50vw"
+                quality={75}
                 className="object-cover object-center"
               />
               {/* Lighter overlay so the image is visible */}
@@ -400,9 +377,7 @@ export default function HomePage() {
                 {cta.subheading}
               </p>
               <div className="flex flex-col sm:flex-row gap-3">
-                <Link href="/register">
-                  <Button variant="secondary" size="md">{cta.button}</Button>
-                </Link>
+                <PublicDashboardLink href="/register" label={cta.button} />
                 <Link href="/pricing">
                   <Button variant="primary" size="md">{cta.secondary}</Button>
                 </Link>

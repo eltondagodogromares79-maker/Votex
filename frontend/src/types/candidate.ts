@@ -24,6 +24,8 @@ export interface CandidateResponse {
   photoUrl: string | null;
   biography: string | null;
   isActive: boolean;
+  currentRoundStatus?: string | null;
+  currentRoundName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -48,3 +50,8 @@ export interface AddCandidateRequest {
 }
 
 export type UpdateCandidateRequest = AddCandidateRequest;
+
+export interface CandidatePlacements {
+  categoryIds: string[];
+  roundIds: string[];
+}

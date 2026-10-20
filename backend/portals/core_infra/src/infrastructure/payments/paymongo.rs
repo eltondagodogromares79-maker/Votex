@@ -99,9 +99,16 @@ impl PaymentProvider for PayMongoClient {
             .json()
             .await
             .map_err(|_| external("invalid PayMongo checkout response"))?;
+        let checkout_url = url::Url::parse(&result.data.attributes.checkout_url)
+            .map_err(|_| external("invalid PayMongo checkout URL"))?;
+        if checkout_url.scheme() != "https"
+            || checkout_url.host_str() != Some("checkout.paymongo.com")
+        {
+            return Err(external("invalid PayMongo checkout URL"));
+        }
         Ok(CheckoutSession {
             id: result.data.id,
-            checkout_url: result.data.attributes.checkout_url,
+            checkout_url: checkout_url.to_string(),
         })
     }
     fn verify_webhook(&self, signature: &str, raw_body: &[u8]) -> Result<(), AppError> {
@@ -142,5 +149,58 @@ impl PaymentProvider for PayMongoClient {
     }
     fn is_live_mode(&self) -> bool {
         self.secret_key.starts_with("sk_live_")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HmacSha256, PayMongoClient};
+    use crate::{
+        application::ports::payment_provider::PaymentProvider,
+        config::{PaymentConfig, SubscriptionPaymentMode},
+    };
+    use hmac::{KeyInit, Mac};
+
+    fn client(secret_key: &str, webhook_secret: &str) -> PayMongoClient {
+        PayMongoClient::new(&PaymentConfig {
+            subscription_mode: SubscriptionPaymentMode::Automated,
+            paymongo_secret_key: secret_key.into(),
+            paymongo_webhook_secret: webhook_secret.into(),
+            paymongo_success_url: "https://example.test/success".into(),
+            paymongo_cancel_url: "https://example.test/cancel".into(),
+            paymongo_payment_methods: vec!["gcash".into()],
+        })
+        .unwrap()
+    }
+
+    fn signature(secret: &[u8], timestamp: &str, body: &[u8], field: &str) -> String {
+        let mut mac = HmacSha256::new_from_slice(secret).unwrap();
+        mac.update(timestamp.as_bytes());
+        mac.update(b".");
+        mac.update(body);
+        format!(
+            "t={timestamp},{field}={}",
+            hex::encode(mac.finalize().into_bytes())
+        )
+    }
+
+    #[test]
+    fn verifies_test_webhook_signature_over_timestamp_and_exact_body() {
+        let body = br#"{"data":{"id":"evt_1"}}"#;
+        let client = client("sk_test_example", "webhook-secret");
+        let valid = signature(b"webhook-secret", "1700000000", body, "te");
+        assert!(client.verify_webhook(&valid, body).is_ok());
+
+        let modified_body = br#"{"data":{"id":"evt_2"}}"#;
+        assert!(client.verify_webhook(&valid, modified_body).is_err());
+    }
+
+    #[test]
+    fn rejects_wrong_mode_missing_signature_and_malformed_timestamp() {
+        let body = b"{}";
+        let client = client("sk_test_example", "webhook-secret");
+        assert!(client.verify_webhook("t=1700000000,li=00", body).is_err());
+        assert!(client.verify_webhook("te=00", body).is_err());
+        assert!(client.verify_webhook("t=bad,te=00", body).is_err());
     }
 }

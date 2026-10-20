@@ -6,10 +6,11 @@ use core_infra::application::ports::security::TokenAuthenticator;
 
 use crate::api::handler::{
     change_password::change_password,
-    email_verification::verify_email,
+    email_verification::{send_verification_code, verify_email},
     login::login,
     logout::logout,
-    me::{me, update_me},
+    me::{delete_me, me, request_email_change, update_me},
+    notifications::{list as list_notifications, mark_all_read, mark_read},
     refresh_token::refresh_token,
     registration::{register_audience, register_organization_owner},
     test_authorization::{
@@ -38,6 +39,12 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                     .wrap(JwtAuthentication::new(token_validator.clone()))
                     .route("/me", web::get().to(me))
                     .route("/me", web::put().to(update_me))
+                    .route("/me", web::delete().to(delete_me))
+                    .route("/me/email", web::put().to(request_email_change))
+                    .route(
+                        "/send-verification-code",
+                        web::post().to(send_verification_code),
+                    )
                     .route("/change-password", web::post().to(change_password)),
             ),
     );
@@ -62,7 +69,7 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
 
     config.service(
         web::scope("/api/v1/test")
-            .wrap(JwtAuthentication::new(token_validator))
+            .wrap(JwtAuthentication::new(token_validator.clone()))
             .route(
                 "/authorization/{organization_id}",
                 web::get()
@@ -84,5 +91,13 @@ pub fn configure(config: &mut web::ServiceConfig, token_validator: Arc<dyn Token
                     .to(test_system_authorization)
                     .wrap(AuthorizationGuard::system("audit.read")),
             ),
+    );
+
+    config.service(
+        web::scope("/api/v1/notifications")
+            .wrap(JwtAuthentication::new(token_validator.clone()))
+            .route("", web::get().to(list_notifications))
+            .route("/read-all", web::post().to(mark_all_read))
+            .route("/{notification_id}/read", web::post().to(mark_read)),
     );
 }

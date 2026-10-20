@@ -12,13 +12,14 @@ interface ModalProps {
   description?: string;
   children?: React.ReactNode;
   footer?: React.ReactNode;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
 }
 
 const SIZE_CLASSES: Record<string, string> = {
-  sm: "w-full max-w-sm",
-  md: "w-full max-w-md",
-  lg: "w-full max-w-2xl",
+  sm: "w-[calc(100vw-2rem)] max-w-sm",
+  md: "w-[calc(100vw-2rem)] max-w-md",
+  lg: "w-[calc(100vw-2rem)] max-w-2xl",
+  xl: "w-[calc(100vw-2rem)] max-w-3xl",
 };
 
 export function Modal({
@@ -40,10 +41,10 @@ export function Modal({
   }, [open]);
 
   function handleBackdropClick(e: React.MouseEvent<HTMLDialogElement>) {
-    const rect = dialogRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const { clientX: x, clientY: y } = e;
-    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+    // Backdrop clicks target the dialog itself. Coordinate checks misread
+    // programmatic clicks on hidden controls (such as a file input at 0,0)
+    // as clicks outside the modal and close it unexpectedly.
+    if (e.target === e.currentTarget) {
       onClose();
     }
   }
@@ -61,7 +62,7 @@ export function Modal({
       ref={dialogRef}
       onClick={handleBackdropClick}
       className={cn(
-        "mx-auto my-auto p-0 bg-transparent focus:outline-none",
+        "mx-auto my-auto max-h-[calc(100dvh-2rem)] p-0 bg-transparent focus:outline-none",
         "backdrop:bg-navy/70 backdrop:backdrop-blur-sm",
         SIZE_CLASSES[size],
       )}
@@ -104,7 +105,7 @@ export function Modal({
         )}
 
         {/* ── Footer — slightly lighter navy ───────────────────────── */}
-        <div className="shrink-0 flex items-center justify-end gap-3 px-5 py-4 sm:px-6 border-t border-white/10 bg-white/4">
+        <div className="shrink-0 flex flex-wrap items-center justify-end gap-2 px-4 py-3 sm:gap-3 sm:px-6 sm:py-4 border-t border-white/10 bg-white/4">
           {footer ?? (
             <Button variant="ghost" size="sm" onClick={onClose}>
               {COPY.actions.close}

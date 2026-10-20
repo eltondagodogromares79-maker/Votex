@@ -29,6 +29,7 @@ export const FOOTER_LEGAL_NAV: NavItem[] = [
   { label: "Terms & Conditions", href: "/terms" },
   { label: "Privacy Policy",     href: "/privacy" },
   { label: "Refund Policy",      href: "/refund-policy" },
+  { label: "Cookie Policy",      href: "/cookie-policy" },
 ];
 
 /** Role-specific sidebar / dashboard nav */
