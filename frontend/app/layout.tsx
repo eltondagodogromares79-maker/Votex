@@ -26,6 +26,10 @@ export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
   ),
+  verification: {
+    google: "VmSQaIhh1BpiPohgBFZT9_TC4Vjk1R6Ww5Rz-bBExJc",
+  },
+
   openGraph: {
     siteName: "Votex",
     type: "website",
