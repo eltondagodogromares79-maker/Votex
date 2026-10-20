@@ -18,7 +18,7 @@ const cinzel = Cinzel({
 
 export const metadata: Metadata = {
   title: {
-    default: "Votex — Pageant Management Platform",
+    default: "Votex — Pageant Management and Voting Platform",
     template: "%s | Votex",
   },
   description:
