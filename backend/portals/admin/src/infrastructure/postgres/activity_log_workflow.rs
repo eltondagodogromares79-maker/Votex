@@ -150,6 +150,16 @@ const TRANSACTION_FROM: &str = "FROM ( \
 
 #[async_trait]
 impl ActivityLogWorkflow for PostgresActivityLogWorkflow {
+    async fn active_organizations_for_owner(&self, owner_id: Uuid) -> Result<Vec<Uuid>, AppError> {
+        sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM organizations WHERE owner_id = $1 AND is_active = TRUE",
+        )
+        .bind(owner_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(database_error)
+    }
+
     async fn create_audit_log(&self, entry: NewAuditLog) -> Result<(), AppError> {
         sqlx::query(
             "INSERT INTO audit_logs (organization_id, pageant_id, actor_user_id, action, \

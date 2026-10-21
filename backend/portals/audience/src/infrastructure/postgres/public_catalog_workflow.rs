@@ -1,7 +1,8 @@
 use crate::{
     application::ports::public_catalog_workflow::PublicCatalogWorkflow,
     domain::public_catalog::{
-        PublicContestant, PublicPageant, PublicPageantDetails, PublicSubscriptionPlan,
+        PublicContestant, PublicLegalPolicy, PublicPageant, PublicPageantDetails,
+        PublicSubscriptionPlan,
     },
 };
 use async_trait::async_trait;
@@ -86,6 +87,11 @@ impl PublicCatalogWorkflow for PostgresPublicCatalogWorkflow {
         .fetch_all(&self.pool)
         .await
         .map_err(database_error)
+    }
+
+    async fn get_legal_policy(&self, slug: &str) -> Result<Option<PublicLegalPolicy>, AppError> {
+        sqlx::query_as::<_, PublicLegalPolicy>("SELECT slug, title, intro, body, version, updated_at FROM legal_policies WHERE slug = $1")
+            .bind(slug).fetch_optional(&self.pool).await.map_err(database_error)
     }
 }
 

@@ -6,11 +6,7 @@ use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use tracing::info;
 use uuid::Uuid;
 
-use crate::{
-    config::DatabaseConfig,
-    domain::security::AuthenticatedUser,
-    errors::AppError,
-};
+use crate::{config::DatabaseConfig, domain::security::AuthenticatedUser, errors::AppError};
 
 #[derive(Clone, Debug)]
 struct RequestDatabaseContext {
@@ -40,10 +36,7 @@ pub async fn with_request_database_context<F: Future>(
 /// Run trusted user-specific work after credentials or a refresh token have
 /// been verified, but before an access token context is available (for
 /// example, resolving the user's current role during login).
-pub async fn with_verified_database_user_context<F: Future>(
-    user_id: Uuid,
-    future: F,
-) -> F::Output {
+pub async fn with_verified_database_user_context<F: Future>(user_id: Uuid, future: F) -> F::Output {
     REQUEST_DATABASE_CONTEXT
         .scope(
             Some(RequestDatabaseContext {

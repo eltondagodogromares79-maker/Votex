@@ -12,6 +12,9 @@ use core_infra::{
     application::ports::security::{PermissionAuthorizer, TokenAuthenticator},
     config::ServerConfig,
     db::with_request_database_context,
+    infrastructure::postgres::realtime_workflow::{
+        publish_pageant_event, start_pageant_event_listener,
+    },
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -33,60 +36,21 @@ pub async fn run(cfg: ServerConfig, dependencies: ApplicationDependencies) -> st
     );
 
     let activity_logs = dependencies.activity_logs.clone();
-    let audit_pool = dependencies.pool.clone();
     let realtime_hub = std::sync::Arc::new(RealtimeHub::new());
-    {
-        let hub = realtime_hub.clone();
-        let pool = dependencies.pool.clone();
-        tokio::spawn(async move {
-            loop {
-                let mut listener = match sqlx::postgres::PgListener::connect_with(&pool).await {
-                    Ok(listener) => listener,
-                    Err(error) => {
-                        tracing::warn!(%error, "realtime listener could not connect; retrying");
-                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                        continue;
-                    }
-                };
-                if let Err(error) = listener.listen("votex_pageant_events").await {
-                    tracing::warn!(%error, "realtime listener could not subscribe; retrying");
-                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                    continue;
-                }
-                loop {
-                    match listener.recv().await {
-                        Ok(notification) => {
-                            if let Some((pageant_id, event)) =
-                                notification.payload().split_once('|')
-                            {
-                                if let Ok(pageant_id) = Uuid::parse_str(pageant_id) {
-                                    hub.publish_pageant(pageant_id, event);
-                                }
-                            }
-                        }
-                        Err(error) => {
-                            tracing::warn!(%error, "realtime listener disconnected; reconnecting");
-                            break;
-                        }
-                    }
-                }
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            }
-        });
-    }
+    start_pageant_event_listener(dependencies.pool.clone(), realtime_hub.clone());
     HttpServer::new(move || {
         let realtime_hub = realtime_hub.clone();
         App::new()
             // ====================================================
             // Middleware
             // ====================================================
-            .wrap(configure(&cfg.frontend_url))
+            .wrap(configure(&cfg.frontend_origins))
             .wrap(RequestIdMiddleware)
             .wrap(rate_limiter.clone())
             .wrap(Logger::default())
             .wrap_fn({
                 let activity_logs = activity_logs.clone();
-                let audit_pool = audit_pool.clone();
+                let realtime_pool = dependencies.pool.clone();
                 move |request, service| {
                     let method = request.method().as_str().to_owned();
                     let path = request.path().to_owned();
@@ -97,19 +61,12 @@ pub async fn run(cfg: ServerConfig, dependencies: ApplicationDependencies) -> st
                     let audit_target = organization_audit_target(&method, &path);
                     let future = service.call(request);
                     let activity_logs = activity_logs.clone();
-                    let audit_pool = audit_pool.clone();
+                    let realtime_pool = realtime_pool.clone();
                     async move {
                         let response = future.await?;
                         if response.status().is_success() {
                             if let Some((pageant_id, event)) = crate::realtime::event_for_request(&method, &path) {
-                                let payload = format!("{pageant_id}|{event}");
-                                if let Err(error) = sqlx::query(
-                                    "SELECT pg_notify('votex_pageant_events', $1)",
-                                )
-                                .bind(payload)
-                                .execute(&audit_pool)
-                                .await
-                                {
+                                if let Err(error) = publish_pageant_event(&realtime_pool, pageant_id, event).await {
                                     tracing::warn!(%error, %pageant_id, "could not publish pageant realtime event");
                                 }
                             }
@@ -125,11 +82,7 @@ pub async fn run(cfg: ServerConfig, dependencies: ApplicationDependencies) -> st
                             if let Some(actor) = actor.as_ref() {
                                 match with_request_database_context(
                                     Some(actor.clone()),
-                                    sqlx::query_scalar::<_, Uuid>(
-                                        "SELECT id FROM organizations WHERE owner_id = $1 AND is_active = TRUE",
-                                    )
-                                    .bind(actor.user_id)
-                                    .fetch_all(&audit_pool),
+                                    activity_logs.active_organizations_for_owner(actor.user_id),
                                 )
                                 .await
                                 {
@@ -177,7 +130,7 @@ pub async fn run(cfg: ServerConfig, dependencies: ApplicationDependencies) -> st
             // ====================================================
             // Application services
             // ====================================================
-            .app_data(web::Data::new(cfg.frontend_url.clone()))
+            .app_data(web::Data::new(cfg.frontend_origins.clone()))
             .app_data(web::Data::from(dependencies.registration.clone()))
             .app_data(web::Data::from(dependencies.email_verification.clone()))
             .app_data(web::Data::from(dependencies.authentication.clone()))
@@ -214,6 +167,9 @@ pub async fn run(cfg: ServerConfig, dependencies: ApplicationDependencies) -> st
             .app_data(web::Data::from(dependencies.admin_directory.clone()))
             .app_data(web::Data::from(dependencies.revenue.clone()))
             .app_data(web::Data::from(dependencies.activity_logs.clone()))
+            .app_data(web::Data::from(dependencies.notifications.clone()))
+            .app_data(web::Data::from(dependencies.contact_messages.clone()))
+            .app_data(web::Data::from(dependencies.legal_policies.clone()))
             .app_data(web::Data::new(dependencies.pool.clone()))
             .app_data(web::Data::from(realtime_hub.clone()))
             // ====================================================
@@ -235,7 +191,7 @@ pub async fn run(cfg: ServerConfig, dependencies: ApplicationDependencies) -> st
                     judge::configure(config, token_validator.clone());
                     tabulator::configure(config, token_validator.clone());
                     audience::configure(config, token_validator.clone());
-                    app::payment_routes(config);
+                    crate::payments::configure(config);
                 }
             })
     })

@@ -49,6 +49,7 @@ pub struct ServerConfig {
     pub host: String,
     pub port: u16,
     pub frontend_url: String,
+    pub frontend_origins: Vec<String>,
 }
 
 impl ServerConfig {
@@ -110,12 +111,35 @@ impl AppConfig {
                 acquire_timeout_secs: parse_env("DATABASE_ACQUIRE_TIMEOUT_SECONDS", 5),
             },
 
-            server: ServerConfig {
-                host: env::var("APP_HOST").unwrap_or_else(|_| "127.0.0.1".into()),
+            server: {
+                let frontend_url =
+                    env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:3000".into());
+                let mut frontend_origins = env::var("FRONTEND_URLS")
+                    .ok()
+                    .into_iter()
+                    .flat_map(|value| {
+                        value
+                            .split(',')
+                            .map(str::trim)
+                            .map(str::to_owned)
+                            .collect::<Vec<_>>()
+                    })
+                    .filter(|origin| !origin.is_empty())
+                    .collect::<Vec<_>>();
+                if !frontend_origins
+                    .iter()
+                    .any(|origin| origin == &frontend_url)
+                {
+                    frontend_origins.push(frontend_url.clone());
+                }
+                ServerConfig {
+                    host: env::var("APP_HOST").unwrap_or_else(|_| "127.0.0.1".into()),
 
-                port: parse_env("APP_PORT", 8080),
+                    port: parse_env("APP_PORT", 8080),
 
-                frontend_url: env::var("FRONTEND_URL").unwrap_or_else(|_| "localhost:3000".into()),
+                    frontend_url,
+                    frontend_origins,
+                }
             },
 
             auth: AuthConfig {

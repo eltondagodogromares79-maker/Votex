@@ -4,9 +4,9 @@ use core_auth::{
     application::{
         authorization::AuthorizationApplication, email_verification::EmailVerificationApplication,
         login::AuthenticationApplication, logout::LogoutApplication,
-        password_management::PasswordManagementApplication, ports::token_validator::TokenValidator,
-        profile::ProfileApplication, refresh_token::RefreshTokenApplication,
-        registration::RegistrationApplication,
+        notifications::NotificationApplication, password_management::PasswordManagementApplication,
+        ports::token_validator::TokenValidator, profile::ProfileApplication,
+        refresh_token::RefreshTokenApplication, registration::RegistrationApplication,
     },
     infrastructure::{
         email::smtp_email_sender::SmtpEmailSender,
@@ -16,6 +16,7 @@ use core_auth::{
             authorization_workflow::PostgresAuthorizationWorkflow,
             email_verification_workflow::PostgresEmailVerificationWorkflow,
             logout_workflow::PostgresLogoutWorkflow,
+            notification_workflow::PostgresNotificationWorkflow,
             password_management_workflow::PostgresPasswordManagementWorkflow,
             profile_workflow::PostgresProfileWorkflow,
             refresh_token_workflow::PostgresRefreshTokenWorkflow,
@@ -29,11 +30,14 @@ use core_auth::{
 use admin::{
     application::{
         activity_logs::ActivityLogApplication, admin_directory::AdminDirectoryApplication,
+        contact_messages::ContactMessageApplication, legal_policies::LegalPolicyApplication,
         revenue::RevenueApplication, subscription_plans::SubscriptionPlanApplication,
     },
     infrastructure::postgres::{
         activity_log_workflow::PostgresActivityLogWorkflow,
         admin_directory_workflow::PostgresAdminDirectoryWorkflow,
+        contact_message_workflow::PostgresContactMessageWorkflow,
+        legal_policy_workflow::PostgresLegalPolicyWorkflow,
         revenue_workflow::PostgresRevenueWorkflow,
         subscription_plan_workflow::PostgresSubscriptionPlanWorkflow,
     },
@@ -137,6 +141,9 @@ pub struct ApplicationDependencies {
     pub admin_directory: Arc<AdminDirectoryApplication>,
     pub revenue: Arc<RevenueApplication>,
     pub activity_logs: Arc<ActivityLogApplication>,
+    pub notifications: Arc<NotificationApplication>,
+    pub contact_messages: Arc<ContactMessageApplication>,
+    pub legal_policies: Arc<LegalPolicyApplication>,
 
     // ------------------------------------------------------------
     // Infrastructure services exposed to HTTP
@@ -373,6 +380,15 @@ pub fn build_dependencies(
     let revenue = Arc::new(RevenueApplication::new(revenue_workflow));
     let activity_log_workflow = Arc::new(PostgresActivityLogWorkflow::new(pool.clone()));
     let activity_logs = Arc::new(ActivityLogApplication::new(activity_log_workflow));
+    let notifications = Arc::new(NotificationApplication::new(Arc::new(
+        PostgresNotificationWorkflow::new(pool.clone()),
+    )));
+    let contact_messages = Arc::new(ContactMessageApplication::new(Arc::new(
+        PostgresContactMessageWorkflow::new(pool.clone()),
+    )));
+    let legal_policies = Arc::new(LegalPolicyApplication::new(Arc::new(
+        PostgresLegalPolicyWorkflow::new(pool.clone()),
+    )));
 
     // ============================================================
     // Email infrastructure
@@ -443,6 +459,9 @@ pub fn build_dependencies(
         admin_directory,
         revenue,
         activity_logs,
+        notifications,
+        contact_messages,
+        legal_policies,
         token_validator,
         auth_config: auth_config.clone(),
         payment_provider,

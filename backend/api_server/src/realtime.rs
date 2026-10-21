@@ -7,8 +7,9 @@ use actix_web::{
 use actix_ws::Message;
 use core_auth::domain::models::authenticated_user::AuthenticatedUser;
 use core_infra::{
-    RealtimeHub, api::middleware::JwtAuthentication, db::with_request_database_context,
-    application::ports::security::TokenAuthenticator,
+    RealtimeHub, api::middleware::JwtAuthentication,
+    application::ports::security::TokenAuthenticator, db::with_request_database_context,
+    infrastructure::postgres::realtime_workflow::can_access_pageant,
 };
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -64,13 +65,16 @@ async fn connect_pageant(
     query: web::Query<PageantSocketQuery>,
     hub: web::Data<RealtimeHub>,
     pool: web::Data<PgPool>,
-    frontend_origin: web::Data<String>,
+    frontend_origins: web::Data<Vec<String>>,
 ) -> Result<HttpResponse, actix_web::Error> {
     let request_origin = request
         .headers()
         .get(header::ORIGIN)
         .and_then(|value| value.to_str().ok());
-    if request_origin != Some(frontend_origin.as_str()) {
+    if !frontend_origins
+        .iter()
+        .any(|origin| request_origin == Some(origin.as_str()))
+    {
         return Err(ErrorForbidden("WebSocket origin is not allowed"));
     }
     let user = hub
@@ -80,8 +84,8 @@ async fn connect_pageant(
         Some(user.clone()),
         can_access_pageant(pool.get_ref(), user.user_id, &user.role, query.pageant_id),
     )
-        .await
-        .map_err(ErrorInternalServerError)?;
+    .await
+    .map_err(ErrorInternalServerError)?;
     if !allowed {
         return Err(ErrorForbidden("No access to this pageant"));
     }
@@ -121,33 +125,6 @@ async fn connect_pageant(
         }
     });
     Ok(response)
-}
-
-async fn can_access_pageant(
-    pool: &PgPool,
-    user_id: Uuid,
-    role: &str,
-    pageant_id: Uuid,
-) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar::<_, bool>(
-        "SELECT \
-           EXISTS (SELECT 1 FROM pageant_member_roles pmr \
-                   JOIN roles r ON r.id = pmr.role_id \
-                   WHERE pmr.pageant_id = $1 AND pmr.user_id = $2 AND pmr.is_active = TRUE \
-                     AND r.is_active = TRUE AND r.code = CASE $3 \
-                       WHEN 'coordinator' THEN 'PAGEANT_COORDINATOR' \
-                       WHEN 'judge' THEN 'PAGEANT_JUDGE' \
-                       WHEN 'tabulator' THEN 'PAGEANT_TABULATOR' \
-                       ELSE '' END) \
-           OR ($3 = 'org_owner' AND EXISTS ( \
-               SELECT 1 FROM pageants p JOIN organizations o ON o.id = p.organization_id \
-               WHERE p.id = $1 AND o.owner_id = $2 AND o.is_active = TRUE))",
-    )
-    .bind(pageant_id)
-    .bind(user_id)
-    .bind(role)
-    .fetch_one(pool)
-    .await
 }
 
 /// Convert successful portal writes into low-detail invalidation events. The

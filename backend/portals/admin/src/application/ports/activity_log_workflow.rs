@@ -8,6 +8,7 @@ use crate::domain::activity_logs::{
 
 #[async_trait]
 pub trait ActivityLogWorkflow: Send + Sync {
+    async fn active_organizations_for_owner(&self, owner_id: Uuid) -> Result<Vec<Uuid>, AppError>;
     async fn list_audit_logs(&self, filter: AuditLogFilter) -> Result<Vec<AuditLog>, AppError>;
     async fn create_audit_log(&self, entry: NewAuditLog) -> Result<(), AppError>;
     async fn get_audit_log(&self, id: Uuid) -> Result<AuditLog, AppError>;

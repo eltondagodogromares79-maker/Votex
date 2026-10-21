@@ -1,5 +1,6 @@
 mod app;
 mod bootstrap;
+mod payments;
 mod realtime;
 mod server;
 

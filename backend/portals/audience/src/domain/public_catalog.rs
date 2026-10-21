@@ -1,3 +1,4 @@
+use chrono::DateTime;
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::Serialize;
@@ -49,4 +50,15 @@ pub struct PublicSubscriptionPlan {
     pub max_categories_per_round: Option<i32>,
     pub public_voting_enabled: bool,
     pub customization_enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicLegalPolicy {
+    pub slug: String,
+    pub title: String,
+    pub intro: String,
+    pub body: String,
+    pub version: i32,
+    pub updated_at: DateTime<chrono::Utc>,
 }

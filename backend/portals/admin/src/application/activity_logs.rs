@@ -19,6 +19,13 @@ impl ActivityLogApplication {
         Self { workflow }
     }
 
+    pub async fn active_organizations_for_owner(
+        &self,
+        owner_id: Uuid,
+    ) -> Result<Vec<Uuid>, AppError> {
+        self.workflow.active_organizations_for_owner(owner_id).await
+    }
+
     pub async fn list_audit_logs(&self, filter: AuditLogFilter) -> Result<Vec<AuditLog>, AppError> {
         validate_period(filter.from, filter.to)?;
         self.workflow.list_audit_logs(filter).await
